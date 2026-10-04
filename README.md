@@ -185,6 +185,198 @@ python train/finetune.py --task choice --data LocalLLaMA/typed-decisions --workf
 
 ---
 
+## Vision: fracture detection on X-rays (experimental)
+
+A research prototype, not a clinical tool. CLM can take an **X-ray image as its state** and
+answer "Is there a bone fracture?" as a typed `Choice` / `Noul` question. The state tower is
+swapped for a frozen image encoder plus a newly trained `state_head`; the action tower (Qwen3-8B
+and the released `action_head`) is unchanged, so the options are ordinary text.
+
+<p align="center">
+  <img alt="CLM vision architecture: X-ray image -> frozen image encoder -> L2 norm -> new trainable state_head; option texts -> frozen Qwen3-8B -> released action_head; 100 x cosine, softmax -> p(fracture)" src="assets/clm_vision_arch.svg" width=100%>
+</p>
+
+- **State encoders** (frozen, run in-process with `transformers`): Qwen3-VL-4B-Instruct (image +
+  "Radiograph for fracture assessment.", last-token hidden state, 2560-d) or MedSigLIP-448
+  (pooled image embedding, 1152-d).
+- **`state_head`** (the only trained part): the standard CLM head shape, `d → 1536 → 1536 → 512`,
+  random init, 7.1M (Qwen3-VL) / 4.9M (MedSigLIP) parameters. Input standardisation used in training
+  is folded into its first layer, so the checkpoint keeps the standard format plus
+  `cfg.state_encoder`, `cfg.state_modality: "image"` and `cfg.action_hidden_size`.
+- **Loss**: class-weighted cross-entropy over the two fixed option embeddings ("Radiograph showing
+  an acute bone fracture." / "Radiograph of intact bones with no fracture."); `action_head` and
+  `logit_scale` (100) frozen. Not in-batch InfoNCE: with two classes, same-label images would be
+  pushed apart as negatives.
+
+### Data: FracAtlas
+
+[FracAtlas](https://figshare.com/articles/dataset/The_dataset/22363012) (CC BY 4.0), 4,083 musculoskeletal
+radiographs. **4,022 used, 717 fractured (17.8%)**: 2 images sit in both class folders with empty
+fracture annotations (ambiguous, dropped) and 59 JPEGs are truncated in the source zip (all
+non-fractured; decoding leaves a grey band that would be a label shortcut, dropped). No patient ids,
+so the split is per image: 70/15/15, stratified by label × body region, seed 20261004.
+
+| split | images | fractured | | body region | images | fractured |
+|---|---:|---:|---|---|---:|---:|
+| train | 2,813 | 499 (17.7%) | | leg | 2,097 | 212 (10.1%) |
+| val | 609 | 109 (17.9%) | | hand | 1,254 | 379 (30.2%) |
+| test | 600 | 109 (18.2%) | | mixed | 394 | 106 (26.9%) |
+| | | | | hip | 179 | 10 (5.6%) |
+| | | | | shoulder | 98 | 10 (10.2%) |
+
+### Results (test split, evaluated once)
+
+Every choice (hyperparameters, logistic-regression C, decision threshold, calibration) was made on
+val. CLM rows are the mean ± sd over 3 seeds of the best val config (lr 3e-5, weight decay 0.1).
+Full tables: [results/fracatlas.md](results/fracatlas.md).
+
+<p align="center">
+  <img alt="Test AUROC with 95% intervals: resolution only 0.528; linear probe Qwen3-VL-4B 0.890; CLM head Qwen3-VL-4B 0.887; linear probe MedSigLIP 0.898; CLM head MedSigLIP 0.898" src="assets/fracatlas_auroc.svg" width=85%>
+</p>
+
+**Ranking and calibration**
+
+| method | AUROC [95% CI] | sens @ 90% spec | ECE raw | ECE (val Platt) | val AUROC |
+|---|---|---:|---:|---:|---:|
+| resolution only (log pixel count) | 0.528 [0.491, 0.566] | 0.147 | 0.317 | 0.003 | 0.522 |
+| linear probe · Qwen3-VL-4B | 0.890 [0.850, 0.927] | 0.725 | 0.159 | 0.036 | 0.887 |
+| **CLM head · Qwen3-VL-4B** | 0.887 ± 0.012 | 0.697 | 0.129 | 0.043 | 0.892 |
+| linear probe · MedSigLIP-448 | 0.898 [0.860, 0.931] | 0.743 | 0.118 | 0.020 | 0.898 |
+| **CLM head · MedSigLIP-448** | 0.898 ± 0.012 | 0.761 | 0.088 | 0.029 | 0.918 |
+
+**At the decision threshold** (max Youden J on val, applied to test; 109 fractured / 491 intact)
+
+| method | sensitivity | specificity | accuracy | balanced acc. | PPV | NPV | F1 | TP / FP / FN / TN |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| always "no fracture" | 0.000 | 1.000 | 0.818 | 0.500 | – | 0.818 | 0.000 | 0 / 0 / 109 / 491 |
+| linear probe · Qwen3-VL-4B | 0.817 | 0.849 | 0.843 | 0.833 | 0.546 | 0.954 | 0.654 | 89 / 74 / 20 / 417 |
+| **CLM head · Qwen3-VL-4B** | 0.820 | 0.778 | 0.786 | 0.799 | 0.452 | 0.951 | 0.582 | 89 / 109 / 20 / 382 |
+| linear probe · MedSigLIP-448 | 0.771 | 0.859 | 0.843 | 0.815 | 0.549 | 0.944 | 0.641 | 84 / 69 / 25 / 422 |
+| **CLM head · MedSigLIP-448** | 0.810 | 0.838 | 0.833 | 0.824 | 0.535 | 0.952 | 0.641 | 88 / 80 / 21 / 411 |
+
+Accuracy is a weak summary at 18% prevalence (answering "no fracture" every time scores 81.8%), so
+read AUROC and balanced accuracy. Threshold metrics are derived exactly from the sensitivity and
+specificity in `results/fracatlas.json`; CLM counts are seed means, rounded.
+
+**Reading the served answer.** With `logit_scale` frozen at 100 the CLM head is overconfident: 92% of
+its val probabilities are below 0.01 or above 0.99, and its best cut sits near p(fracture) ≈ 1e-5, not
+0.5. The plain `Choice` answer (the more probable option) therefore catches only about 60% (MedSigLIP)
+/ 56% (Qwen3-VL-4B) of fractured val images, at 3–5% false positives. The sensitivities above use the
+threshold picked on val. When serving, read `probabilities["fracture"]` and apply a threshold chosen
+on val (the notebook shows how). The linear probe is far better calibrated (74–77% of fractures above
+0.5). Calibrating the served head is an open item.
+
+**Does the CLM head add value over a linear probe?** No, not on this task. Paired bootstrap
+ΔAUROC (CLM − linear probe, same encoder, same resamples): **−0.003 [−0.026, +0.021]** on
+Qwen3-VL-4B and **+0.000 [−0.020, +0.020]** on MedSigLIP. The +0.020 MedSigLIP edge on val did
+not hold up on test.
+
+| ablation (CLM head, best config) | Qwen3-VL-4B AUROC | MedSigLIP AUROC |
+|---|---:|---:|
+| as trained | 0.887 ± 0.012 | 0.898 ± 0.012 |
+| trainable `logit_scale` | 0.881 ± 0.003 | 0.903 ± 0.008 |
+| no input standardisation | 0.890 ± 0.001 | 0.889 ± 0.007 |
+| no class weights | 0.881 ± 0.012 | 0.896 ± 0.003 |
+| random option vectors instead of Qwen3-8B text | 0.871 ± 0.011 | 0.894 ± 0.007 |
+
+Random option vectors do as well as the text options, so with two fixed options the text tower adds
+no accuracy; the head acts as an MLP classifier. Its value here is the interface: an X-ray is answered
+through the same typed-question API and checkpoint format as text.
+
+| test AUROC by region (fractured / images) | hand (57 / 190) | leg (32 / 310) | mixed (16 / 59) | hip* (2 / 27) | shoulder* (2 / 14) |
+|---|---:|---:|---:|---:|---:|
+| linear probe · Qwen3-VL-4B | 0.855 | 0.880 | 0.844 | 0.980 | 0.958 |
+| CLM head · Qwen3-VL-4B | 0.818 | 0.891 | 0.869 | 1.000 | 0.931 |
+| linear probe · MedSigLIP-448 | 0.830 | 0.918 | 0.865 | 0.960 | 0.958 |
+| CLM head · MedSigLIP-448 | 0.869 | 0.907 | 0.822 | 0.960 | 0.722 |
+
+\* Two fractured test images: not interpretable. Caveats: per-image splits can put one patient's views
+in both train and test, so test numbers are optimistic for unseen patients; with 109 fractured test
+images the AUROC intervals are about ±0.04, wider than most gaps between methods.
+
+### Reproduce (Apple Silicon or CUDA, no vLLM needed)
+
+Times measured on an Apple M5 Pro laptop (24 GB unified memory, MPS). MedSigLIP is gated: accept its
+terms on Hugging Face and log in with a **Read** token (`hf auth login`).
+
+```bash
+pip install -r requirements.txt                   # Linux; on a Mac (no vLLM wheel): pip install --no-deps -e .
+                                                  #   then the "FracAtlas vision" lines of requirements.txt
+python tools/fracatlas_download.py                # 1. data + splits          (340 MB download)
+python train/embed_images.py --encoder google/medsiglip-448        # 2. images  ~9 min
+python train/embed_images.py --encoder Qwen/Qwen3-VL-4B-Instruct   #            ~39 min, ~12 GB
+python train/embed_options.py                     # 3. option texts, Qwen3-8B bf16, ~25 s
+python train/sweep_vision.py --encoder medsiglip --ablations       # 4. CLM heads, val-only sweep
+python train/sweep_vision.py --encoder qwen3-vl-4b --ablations     #    (120 runs in all, ~12 min)
+python train/baselines_vision.py --encoder medsiglip   --out-dir runs/fracatlas/lr-medsiglip    # 5. linear probes
+python train/baselines_vision.py --encoder qwen3-vl-4b --out-dir runs/fracatlas/lr-qwen3-vl-4b  #    (seconds)
+python evaluation/vision_eval.py --dry-run        # 6. debug on val first; then once on test:
+python evaluation/vision_eval.py                  #    -> results/fracatlas.md (~35 s)
+python tools/fracatlas_figures.py                 #    -> assets/*.svg
+```
+
+Close memory-heavy apps before the Qwen3-VL run on a 24 GB Mac: the embedding script empties the MPS
+cache after every batch, but swapping still slows it down several-fold. Every embedding step is
+resumable.
+
+### Serve a vision head (with vLLM)
+
+The option texts go through the usual Qwen3-8B vLLM encoder; the image encoder runs inside
+`clm-serve` itself (CUDA, then MPS, then CPU; `CLM_IMAGE_DEVICE` overrides). Export the best head:
+
+```bash
+mkdir -p checkpoints
+cp "$(python -c "import json; print(json.load(open('runs/fracatlas/sweep/medsiglip/sweep.json'))['best']['dir'])")/s0/best_head.pt" \
+   checkpoints/fracatlas-medsiglip.pt
+```
+
+**One Linux GPU box.** Leave room for the image encoder next to vLLM (MedSigLIP needs ~2 GB, Qwen3-VL-4B ~10 GB):
+
+```bash
+vllm serve Qwen/Qwen3-8B --served-model-name qwen3-8b --runner pooling --max-model-len 2048 \
+    --gpu-memory-utilization 0.75 --port 8090 &
+clm-serve --model fracatlas-medsiglip=checkpoints/fracatlas-medsiglip.pt
+```
+
+**Mac + a remote GPU for vLLM.** vLLM runs on the GPU box; `clm-serve` and the image encoder run on the Mac (MPS):
+
+```bash
+ssh -N -L 8090:localhost:8090 <gpu-box> &          # vLLM from the command above, on the GPU box
+clm-serve --model fracatlas-medsiglip=checkpoints/fracatlas-medsiglip.pt
+```
+
+Ask about a radiograph. Use the option texts the head was trained with (they are stored in its
+`cfg["options"]`); the question's `instructions` do not reach the image encoder.
+
+```bash
+curl -s localhost:8700/v1/systemone -H 'content-type: application/json' -d @- <<EOF
+{"model": "fracatlas-medsiglip",
+ "state": {"type": "image", "image": "$(base64 < xray.jpg | tr -d '\n')"},
+ "questions": {"fx": {"type": "choice", "instructions": "Is there a bone fracture?",
+   "criteria": {"fracture": "Radiograph showing an acute bone fracture.",
+                "no_fracture": "Radiograph of intact bones with no fracture."}}}}
+EOF
+```
+
+```python
+from clm import CLMClient, Choice, ImageState
+
+client = CLMClient()
+r = client.system_one(ImageState(path="xray.jpg"), model="fracatlas-medsiglip", questions={
+    "fx": Choice(instructions="Is there a bone fracture?",
+                 criteria={"fracture": "Radiograph showing an acute bone fracture.",
+                           "no_fracture": "Radiograph of intact bones with no fracture."})})
+print(r.answers["fx"].probabilities)
+```
+
+A walkthrough with images, a sanity check against the offline numbers and the error cases is in
+[examples/fracatlas_vision.ipynb](examples/fracatlas_vision.ipynb). Warm latency per image on the
+M5 Pro: MedSigLIP head ~0.2 s; Qwen3-VL-4B head 0.28 s (373×454) to 2.7 s (2304×2880). The Qwen3-8B
+option embeddings in serving come from vLLM, while training used `transformers`; expect small
+differences in probabilities, which the notebook's sanity check measures.
+
+---
+
 ## How it works
 
 ### About
@@ -353,20 +545,33 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 │   ├── engine.py                #   Engine.answer(...) / Engine.rank(...): the inference engine
 │   ├── heads.py                 #   head architecture, checkpoint load / hot-reload / download
 │   ├── embedder.py              #   /v1/embeddings client + LRU cache of normalised embeddings
+│   ├── image.py                 #   ImageState: image states (path / base64), no torch needed
+│   ├── image_embedder.py        #   image encoders for vision heads, shared with training
 │   ├── cache.py                 #   the reserved vector arena behind --action-cache
 │   ├── server.py                #   FastAPI app, `clm-serve`
 │   └── static/                  #   the playground: index.html + app.css + app.js, no build step
 ├── tools/playground_mock.py     # serve the playground without a GPU (fake encoder)
+├── tools/fracatlas_download.py  # vision: FracAtlas download, cleaning, stratified splits
+├── tools/fracatlas_figures.py   # vision: assets/clm_vision_arch.svg + assets/fracatlas_auroc.svg
 ├── train/                       # fine-tuning
 │   ├── finetune.py              #   trains the projection heads on a frozen encoder
 │   ├── adapters.py              #   dataset adapters: agentic traces, typed decisions
-│   └── embed_utils.py           #   encoder embeddings with the training token recipe
+│   ├── embed_utils.py           #   encoder embeddings with the training token recipe
+│   ├── embed_images.py          #   vision: image embeddings (Qwen3-VL / MedSigLIP, MPS or CUDA)
+│   ├── embed_options.py         #   vision: option texts through Qwen3-8B + the released action head
+│   ├── finetune_vision.py       #   vision: train a state head on image embeddings
+│   ├── sweep_vision.py          #   vision: val-only sweep + ablations
+│   ├── baselines_vision.py      #   vision: logistic-regression linear probe
+│   └── fracatlas_data.py        #   vision: splits + cached embeddings loader
 ├── evaluation/bon_eval.py            # unified best-of-N evaluation
+├── evaluation/vision_eval.py         # vision: one test evaluation -> results/fracatlas.md
+├── results/fracatlas.md              # vision: FracAtlas test results
 ├── preprocessing/hf_embeddings.py    # embedding dir <-> Hugging Face dataset
 ├── requirements.txt             # pip install -r requirements.txt  (clm + torch + vLLM + example deps)
 ├── examples/                    # CLM vs Jev on the T-Rex runner (examples/t_rex/README.md)
 │   ├── common.py                #   one client for both endpoints: retries, latency, cache
-│   └── t_rex/                   #   Chrome dinosaur game in real time (run.py --model clm|jev)
+│   ├── t_rex/                   #   Chrome dinosaur game in real time (run.py --model clm|jev)
+│   └── fracatlas_vision.ipynb   #   vision: ask a served vision head about X-rays
 └── docs/FINETUNING.md           # the fine-tuning guide
 ```
 
@@ -424,7 +629,8 @@ reads paths). The image goes through the head's own encoder (`cfg.state_encoder`
 in-process with `transformers` on CUDA, then MPS, then CPU; `CLM_IMAGE_DEVICE` overrides),
 with the instruction it was trained on; the question's options go through the text encoder
 and action head as usual. A vision head refuses text states and a text head refuses image
-states. FracAtlas fracture detection results: [results/fracatlas.md](results/fracatlas.md).
+states. Training, results and serving instructions:
+[Vision: fracture detection on X-rays](#vision-fracture-detection-on-x-rays-experimental).
 
 ### `GET /v1/models`
 

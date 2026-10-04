@@ -10,3 +10,4 @@ transformers>=4.57   # Qwen3-VL
 accelerate>=1.0      # low-memory loading of the VL / Qwen3-8B weights
 Pillow>=10
 scikit-learn>=1.4    # baselines (logistic regression) and metrics (AUROC, ROC)
+# examples/fracatlas_vision.ipynb: pip install jupyter

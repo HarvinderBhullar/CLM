@@ -80,8 +80,8 @@ def architecture() -> str:
     p.append(box(560, y0 + 260, 230, 96, "frozen", [("action_head (released)", "t"), ("4096 → 1536 → 1536 → 512", "m"),
                                                     ("CLM-v0.1-8B weights", "s")]))
     p.append(box(820, y0 + 282, 100, 52, "plain", [("z_option", "t"), ("2 × 512", "m")]))
-    p.append(box(950, y0 + 168, 210, 90, "frozen", [("Score", "t"), ("100 × cosine similarity", "s"),
-                                                    ("softmax → p(fracture)", "s")]))
+    p.append(box(950, y0 + 168, 210, 90, "frozen", [("Score", "t"), ("100 × cosine similarity, softmax", "s"),
+                                                    ("Platt + threshold fit on val", "s")]))
     p.append(box(950, y0 + 292, 210, 64, "plain", [("Typed answer", "t"), ("Choice / Noul, same API as text", "s")]))
     for d in ("M150,{a} H176", "M420,{a} H446", "M530,{a} H556", "M790,{a} H816"):
         p.append(arrow(d.format(a=y0 + 118)))

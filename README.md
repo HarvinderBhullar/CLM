@@ -258,13 +258,22 @@ Accuracy is a weak summary at 18% prevalence (answering "no fracture" every time
 read AUROC and balanced accuracy. Threshold metrics are derived exactly from the sensitivity and
 specificity in `results/fracatlas.json`; CLM counts are seed means, rounded.
 
-**Reading the served answer.** With `logit_scale` frozen at 100 the CLM head is overconfident: 92% of
-its val probabilities are below 0.01 or above 0.99, and its best cut sits near p(fracture) ≈ 1e-5, not
-0.5. The plain `Choice` answer (the more probable option) therefore catches only about 60% (MedSigLIP)
-/ 56% (Qwen3-VL-4B) of fractured val images, at 3–5% false positives. The sensitivities above use the
-threshold picked on val. When serving, read `probabilities["fracture"]` and apply a threshold chosen
-on val (the notebook shows how). The linear probe is far better calibrated (74–77% of fractures above
-0.5). Calibrating the served head is an open item.
+**Reading the served answer: calibration.** With `logit_scale` frozen at 100 the raw head is
+overconfident: about 90% of its probabilities are below 0.01 or above 0.99, and its best cut sits near
+p(fracture) ≈ 1e-5, not 0.5. Its plain `choice` (the more probable option) misses a third or more of
+fractures. `train/calibrate_vision.py` fixes this on **val only**: Platt scaling of the logit difference
+plus a decision threshold (max Youden J), stored in the checkpoint's `cfg["calibration"]` and applied
+by the engine. A calibrated head returns meaningful probabilities, and its `choice` follows the threshold
+(the answer carries it as `threshold`). Deployed checkpoints (seed 0) on test:
+
+| served head | AUROC | plain answer: sens / spec / acc. / ECE | calibrated: threshold → sens / spec / acc. / ECE |
+|---|---:|---|---|
+| MedSigLIP-448 | 0.889 | 0.651 / 0.963 / 0.907 / 0.085 | p ≥ 0.112 → **0.835 / 0.772** / 0.783 / **0.040** |
+| Qwen3-VL-4B | 0.900 | 0.596 / 0.937 / 0.875 / 0.116 | p ≥ 0.173 → **0.798 / 0.809** / 0.807 / **0.032** |
+
+Accuracy drops because it rewards answering "no fracture"; the calibrated threshold trades specificity for
+catching far more fractures. Use `--min-sensitivity 0.9` (or another target) to pick the threshold by
+sensitivity on val instead.
 
 **Does the CLM head add value over a linear probe?** No, not on this task. Paired bootstrap
 ΔAUROC (CLM − linear probe, same encoder, same resamples): **−0.003 [−0.026, +0.021]** on
@@ -322,12 +331,13 @@ resumable.
 ### Serve a vision head (with vLLM)
 
 The option texts go through the usual Qwen3-8B vLLM encoder; the image encoder runs inside
-`clm-serve` itself (CUDA, then MPS, then CPU; `CLM_IMAGE_DEVICE` overrides). Export the best head:
+`clm-serve` itself (CUDA, then MPS, then CPU; `CLM_IMAGE_DEVICE` overrides). Export the best head,
+calibrated on val:
 
 ```bash
-mkdir -p checkpoints
-cp "$(python -c "import json; print(json.load(open('runs/fracatlas/sweep/medsiglip/sweep.json'))['best']['dir'])")/s0/best_head.pt" \
-   checkpoints/fracatlas-medsiglip.pt
+best=$(python -c "import json; print(json.load(open('runs/fracatlas/sweep/medsiglip/sweep.json'))['best']['dir'])")
+python train/calibrate_vision.py --ckpt "$best/s0/best_head.pt" --out checkpoints/fracatlas-medsiglip.pt
+python evaluation/vision_eval.py --dry-run --out /tmp/check.md    # optional: served-head numbers on val
 ```
 
 **One Linux GPU box.** Leave room for the image encoder next to vLLM (MedSigLIP needs ~2 GB, Qwen3-VL-4B ~10 GB):
@@ -366,7 +376,8 @@ r = client.system_one(ImageState(path="xray.jpg"), model="fracatlas-medsiglip", 
     "fx": Choice(instructions="Is there a bone fracture?",
                  criteria={"fracture": "Radiograph showing an acute bone fracture.",
                            "no_fracture": "Radiograph of intact bones with no fracture."})})
-print(r.answers["fx"].probabilities)
+a = r.answers["fx"]
+print(a.choice, a.probabilities["fracture"], a.threshold)   # choice follows the calibrated threshold
 ```
 
 A walkthrough with images, a sanity check against the offline numbers and the error cases is in
@@ -547,6 +558,7 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 │   ├── embedder.py              #   /v1/embeddings client + LRU cache of normalised embeddings
 │   ├── image.py                 #   ImageState: image states (path / base64), no torch needed
 │   ├── image_embedder.py        #   image encoders for vision heads, shared with training
+│   ├── calibration.py           #   applies a vision head's val-fitted calibration and threshold
 │   ├── cache.py                 #   the reserved vector arena behind --action-cache
 │   ├── server.py                #   FastAPI app, `clm-serve`
 │   └── static/                  #   the playground: index.html + app.css + app.js, no build step
@@ -560,12 +572,13 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 │   ├── embed_images.py          #   vision: image embeddings (Qwen3-VL / MedSigLIP, MPS or CUDA)
 │   ├── embed_options.py         #   vision: option texts through Qwen3-8B + the released action head
 │   ├── finetune_vision.py       #   vision: train a state head on image embeddings
+│   ├── calibrate_vision.py      #   vision: Platt scaling + decision threshold on val -> cfg["calibration"]
 │   ├── sweep_vision.py          #   vision: val-only sweep + ablations
 │   ├── baselines_vision.py      #   vision: logistic-regression linear probe
 │   └── fracatlas_data.py        #   vision: splits + cached embeddings loader
 ├── evaluation/bon_eval.py            # unified best-of-N evaluation
 ├── evaluation/vision_eval.py         # vision: one test evaluation -> results/fracatlas.md
-├── results/fracatlas.md              # vision: FracAtlas test results
+├── results/fracatlas.md              # vision: FracAtlas test results (+ fracatlas_verdict.md, written by hand)
 ├── preprocessing/hf_embeddings.py    # embedding dir <-> Hugging Face dataset
 ├── requirements.txt             # pip install -r requirements.txt  (clm + torch + vLLM + example deps)
 ├── examples/                    # CLM vs Jev on the T-Rex runner (examples/t_rex/README.md)
@@ -628,7 +641,8 @@ to `CLMClient` / `Engine` (the client inlines the file as base64; the HTTP serve
 reads paths). The image goes through the head's own encoder (`cfg.state_encoder`, loaded
 in-process with `transformers` on CUDA, then MPS, then CPU; `CLM_IMAGE_DEVICE` overrides),
 with the instruction it was trained on; the question's options go through the text encoder
-and action head as usual. A vision head refuses text states and a text head refuses image
+and action head as usual. A head calibrated by `train/calibrate_vision.py` returns calibrated
+probabilities for its trained option pair, and its `choice` follows the stored threshold. A vision head refuses text states and a text head refuses image
 states. Training, results and serving instructions:
 [Vision: fracture detection on X-rays](#vision-fracture-detection-on-x-rays-experimental).
 

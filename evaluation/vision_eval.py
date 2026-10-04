@@ -21,6 +21,7 @@ bootstrap of the AUROC difference CLM - linear probe.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import math
 import os
@@ -40,7 +41,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "src"))
 sys.path.insert(0, os.path.join(REPO, "train"))
 import fracatlas_data  # noqa: E402
-from clm.heads import make_head  # noqa: E402
+from clm import calibration  # noqa: E402
+from clm.heads import HeadPair, make_head  # noqa: E402
 
 # numpy 2.2 + Apple Accelerate raise spurious divide/overflow warnings inside matmul
 warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*encountered in (matmul|dot)")
@@ -71,6 +73,21 @@ def clm_scores(ckpt_path: str, options: dict, x: torch.Tensor) -> np.ndarray:
         scale = float(torch.as_tensor(ck["logit_scale"]).float().exp().clamp(max=100.0))
         p = torch.softmax(scale * z @ a.t(), -1)[:, oset["keys"].index(cfg["positive"])]
     return p.double().numpy()
+
+
+def served_logit_diff(ckpt_path: str, options: dict, x: torch.Tensor) -> tuple[np.ndarray, dict | None]:
+    """Raw logit difference fracture - no_fracture of a deployed checkpoint (``HeadPair``, the code
+    ``clm-serve`` runs) for the ``choice`` options, and its calibration entry if it has one."""
+    head = HeadPair("served", ckpt_path, device="cpu").ensure()
+    oset = options["sets"]["choice"]
+    pos = oset["keys"].index("fracture")
+    lg = head.scale * head.project_states(x.numpy()) @ head.project_actions(oset["raw"].float().numpy()).T
+    d = (lg[:, pos] - lg[:, 1 - pos]).double().numpy()
+    return d, calibration.find(head.cfg, oset["texts"])
+
+
+def sigmoid(z: np.ndarray) -> np.ndarray:
+    return 1 / (1 + np.exp(-np.clip(z, -500, 500)))
 
 
 def lr_scores(model_dir: str, x: torch.Tensor) -> np.ndarray:
@@ -174,6 +191,10 @@ def main() -> None:
     ap.add_argument("--lr-dir", default="runs/fracatlas/lr-{encoder}")
     ap.add_argument("--out", default="results/fracatlas.md")
     ap.add_argument("--dry-run", action="store_true", help="evaluate on val instead of test (no test access)")
+    ap.add_argument("--served", nargs="*", default=None,
+                    help="deployed (calibrated) vision checkpoints to report as served; default checkpoints/fracatlas-*.pt")
+    ap.add_argument("--verdict", default="results/fracatlas_verdict.md",
+                    help="hand-written verdict inserted into the report, if the file exists")
     a = ap.parse_args()
 
     eval_split = "val" if a.dry_run else "test"
@@ -229,6 +250,26 @@ def main() -> None:
             res["methods"][f"CLM ablation: {ABLATION_NAMES[k]} · {label}"] = {"runs": runs, "encoder": enc,
                                                                               "ablation": k}
 
+    # deployed checkpoints: the plain answer (raw p > 0.5) vs the calibrated, thresholded one
+    res["served"] = {}
+    served = a.served if a.served is not None else sorted(glob.glob("checkpoints/fracatlas-*.pt"))
+    for ck in served:
+        cfg = torch.load(ck, map_location="cpu", weights_only=False)["cfg"]
+        if cfg.get("state_modality") != "image":
+            continue
+        enc = cfg["state_encoder"]
+        d, entry = served_logit_diff(ck, options, fracatlas_data.load_split(enc, eval_split, a.data).x)
+        raw = sigmoid(d)
+        se0, sp0 = sens_spec(yt, raw, 0.5)
+        srow = {"ckpt": ck, "encoder": enc, "seed": cfg.get("seed"), "auroc": float(roc_auc_score(yt, d)),
+               "plain": {"sens": se0, "spec": sp0, "acc": float(np.mean((raw >= 0.5) == yt)), "ece": ece(yt, raw)}}
+        if entry:
+            cal = sigmoid(entry["a"] * d + entry["b"])
+            se1, sp1 = sens_spec(yt, cal, entry["threshold"])
+            srow["calibrated"] = {"threshold": entry["threshold"], "sens": se1, "spec": sp1,
+                                 "acc": float(np.mean((cal >= entry["threshold"]) == yt)), "ece": ece(yt, cal)}
+        res["served"][os.path.basename(ck)] = srow
+
     # ---------------------------------------------------------------- write
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     out_md = a.out if not a.dry_run else a.out.replace(".md", ".dryrun-val.md")
@@ -264,8 +305,25 @@ def main() -> None:
           "| encoder | ΔAUROC | 95% CI | P(Δ ≤ 0) |", "|---|---|---|---|"]
     L += [f"| {k} | {v['diff']:+.3f} | [{v['ci'][0]:+.3f}, {v['ci'][1]:+.3f}] | {v['p_le_0']:.3f} |"
           for k, v in res["paired"].items()]
-    L += ["", "<!-- verdict -->", "",
-          "## Ablations (CLM head, best config)", "",
+    verdict = open(a.verdict).read().strip() if os.path.exists(a.verdict) else "<!-- verdict -->"
+    L += ["", verdict, ""]
+    if res["served"]:
+        L += ["## Served heads: plain answer vs calibrated decision", "",
+              f"The deployed checkpoints (`checkpoints/`, seed 0 of the best config) scored with the serving code "
+              f"on {eval_split}. *Plain*: the option with the higher raw probability (p > 0.5), which is what "
+              "`choice` returned before calibration. *Calibrated*: Platt scaling and a threshold, both fit on val "
+              "by `train/calibrate_vision.py` and applied by the engine. AUROC is the same for both.", "",
+              "| checkpoint | AUROC | plain sens / spec | plain acc. | plain ECE | threshold | calibrated sens / spec "
+              "| calibrated acc. | calibrated ECE |",
+              "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        for name, r in res["served"].items():
+            c = r.get("calibrated")
+            L.append(f"| `{name}` | {r['auroc']:.3f} | {r['plain']['sens']:.3f} / {r['plain']['spec']:.3f} | "
+                     f"{r['plain']['acc']:.3f} | {r['plain']['ece']:.3f} | "
+                     + (f"{c['threshold']:.3f} | {c['sens']:.3f} / {c['spec']:.3f} | {c['acc']:.3f} | {c['ece']:.3f} |"
+                        if c else "– | not calibrated | – | – |"))
+        L += [""]
+    L += ["## Ablations (CLM head, best config)", "",
           HEADER]
     L += [row(k.replace("CLM ablation: ", ""), v["runs"]) for k, v in res["methods"].items()
           if k.startswith("CLM ablation")]

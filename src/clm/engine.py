@@ -16,6 +16,7 @@ head's own image encoder (``cfg.state_encoder``, with the instruction it was tra
 the question's ``instructions`` do not reach it), the options through the usual text
 encoder and action head.  Text states are refused by vision heads and image states by
 text heads, since a head only means something next to the encoder it was trained on.
+A vision head may carry a val-fitted calibration for its option pair (``clm.calibration``).
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ import glob
 import os
 from typing import Any
 
+from . import calibration
 from .cache import CacheDisabled, VectorArena
 from .client import question_to_dict
 from .embedder import Embedder
@@ -176,7 +178,13 @@ class Engine:
         for i, (qid, (_, keys, texts)) in enumerate(pairs.items()):
             cos = za[k:k + len(texts)] @ zq[i]
             k += len(texts)
-            answers[qid] = answer_from_logits(questions[qid], keys, (scale * cos / temperature).tolist())
+            cal = calibration.find(head.cfg, texts) if image is not None else None
+            if cal is None:
+                answers[qid] = answer_from_logits(questions[qid], keys, (scale * cos / temperature).tolist())
+            else:   # a vision head's fitted option pair: Platt-calibrated, decided by its val threshold
+                logits = calibration.apply(cal, texts, (scale * cos).tolist())
+                answers[qid] = calibration.decide(cal, keys, texts, answer_from_logits(
+                    questions[qid], keys, [v / temperature for v in logits]))
         return {"model": model, "answers": answers,
                 "usage": {"billing_units": len(questions), "input_tokens": sum(tokens), "output_tokens": 0}}
 

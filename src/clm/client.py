@@ -81,6 +81,7 @@ def question_to_dict(q: Question) -> dict:
 class NoulAnswer:
     noul: float
     type: str = "noul"
+    threshold: float | None = None      # a calibrated vision head's recommended cut on ``noul``
 
     @property
     def probabilities(self) -> dict[str, float]:
@@ -93,6 +94,7 @@ class ChoiceAnswer:
     confidence: float
     probabilities: dict[str, float]
     type: str = "choice"
+    threshold: float | None = None      # set when a calibrated vision head chose by threshold
 
 
 @dataclass
@@ -110,9 +112,10 @@ Answer = NoulAnswer | ChoiceAnswer | ScoreAnswer
 def parse_answer(d: dict) -> Answer:
     t = d.get("type")
     if t == "noul":
-        return NoulAnswer(noul=float(d["noul"]))
+        return NoulAnswer(noul=float(d["noul"]), threshold=d.get("threshold"))
     if t == "choice":
-        return ChoiceAnswer(choice=d["choice"], confidence=float(d["confidence"]), probabilities=dict(d["probabilities"]))
+        return ChoiceAnswer(choice=d["choice"], confidence=float(d["confidence"]), probabilities=dict(d["probabilities"]),
+                            threshold=d.get("threshold"))
     if t == "score":
         return ScoreAnswer(score=float(d["score"]), confidence=float(d["confidence"]),
                            probabilities=dict(d["probabilities"]), legend=dict(d.get("legend", {})))

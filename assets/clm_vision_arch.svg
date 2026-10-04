@@ -48,8 +48,8 @@
 <text x="834" y="379" font-family="Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#46555f">2 × 512</text>
 <rect x="950" y="218" width="210" height="90" rx="8" fill="#eef1f3" stroke="#6f7d86" stroke-width="1.5"/>
 <text x="964" y="244" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">Score</text>
-<text x="964" y="265" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">100 × cosine similarity</text>
-<text x="964" y="284" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">softmax → p(fracture)</text>
+<text x="964" y="265" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">100 × cosine similarity, softmax</text>
+<text x="964" y="284" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">Platt + threshold fit on val</text>
 <rect x="950" y="342" width="210" height="64" rx="8" fill="#ffffff" stroke="#d6dde1" stroke-width="1.5"/>
 <text x="964" y="368" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">Typed answer</text>
 <text x="964" y="389" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">Choice / Noul, same API as text</text>

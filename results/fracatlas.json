@@ -683,5 +683,45 @@
     2
    ]
   }
+ },
+ "served": {
+  "fracatlas-medsiglip.pt": {
+   "ckpt": "checkpoints/fracatlas-medsiglip.pt",
+   "encoder": "google/medsiglip-448",
+   "seed": 0,
+   "auroc": 0.8885629402642053,
+   "plain": {
+    "sens": 0.6513761467889908,
+    "spec": 0.9633401221995926,
+    "acc": 0.9066666666666666,
+    "ece": 0.08541433655512823
+   },
+   "calibrated": {
+    "threshold": 0.11227741177483237,
+    "sens": 0.8348623853211009,
+    "spec": 0.7718940936863544,
+    "acc": 0.7833333333333333,
+    "ece": 0.039931662037528494
+   }
+  },
+  "fracatlas-qwen3-vl-4b.pt": {
+   "ckpt": "checkpoints/fracatlas-qwen3-vl-4b.pt",
+   "encoder": "Qwen/Qwen3-VL-4B-Instruct",
+   "seed": 0,
+   "auroc": 0.9001476111287581,
+   "plain": {
+    "sens": 0.5963302752293578,
+    "spec": 0.9368635437881874,
+    "acc": 0.875,
+    "ece": 0.11586176964479686
+   },
+   "calibrated": {
+    "threshold": 0.17287537696302982,
+    "sens": 0.7981651376146789,
+    "spec": 0.8085539714867617,
+    "acc": 0.8066666666666666,
+    "ece": 0.03196581013081283
+   }
+  }
  }
 }

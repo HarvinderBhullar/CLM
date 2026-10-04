@@ -12,6 +12,10 @@ FracAtlas (Abedeen et al. 2023, CC BY 4.0) comes from figshare as one zip:
 Images found in *both* class folders have an ambiguous label (the csv says fractured
 but their YOLO box files are empty), so they are dropped from every split.
 
+59 JPEGs (all non-fractured, IMG0004028-IMG0004347) are truncated in the source zip;
+decoding them anyway fills the bottom rows with flat grey, a label shortcut. They are
+removed *after* splitting, so every other image keeps its split.
+
 There are no patient ids, so splits are image-level, stratified on label x body region,
 70/15/15 with a fixed seed. Consecutive image ids often look like one study (several
 views of the same limb), so a patient can land in more than one split: this leaks, and
@@ -29,6 +33,7 @@ import random
 import zipfile
 
 import requests
+from PIL import Image
 
 URL = "https://ndownloader.figshare.com/files/65518038"
 MD5 = "fe9da2c7c285915ebee69dfdab8fd396"
@@ -90,6 +95,18 @@ def load(root: str) -> tuple[list[dict], list[str]]:
     return rows, ambiguous
 
 
+def truncated(root: str, rows: list[dict]) -> list[str]:
+    """Image ids whose JPEG stream ends early (PIL refuses to fully decode them)."""
+    bad = []
+    for r in rows:
+        try:
+            with Image.open(os.path.join(root, r["path"])) as im:
+                im.load()
+        except OSError:
+            bad.append(r["image_id"])
+    return bad
+
+
 def split(rows: list[dict], seed: int) -> dict[str, list[dict]]:
     strata = collections.defaultdict(list)
     for r in rows:
@@ -139,6 +156,10 @@ def main() -> None:
     print(f"\nhardware {sum(r['hardware'] for r in rows)}, multiscan {sum(r['multiscan'] for r in rows)}")
 
     splits = split(rows, a.seed)
+    broken = set(truncated(raw, rows))
+    splits = {k: [r for r in v if r["image_id"] not in broken] for k, v in splits.items()}
+    print(f"dropped {len(broken)} truncated JPEGs after splitting "
+          f"({sum(r['fractured'] for r in rows if r['image_id'] in broken)} fractured)")
     sdir = os.path.join(a.out, "splits")
     os.makedirs(sdir, exist_ok=True)
     cols = list(rows[0])
@@ -148,6 +169,7 @@ def main() -> None:
             w.writeheader(); w.writerows(rs)
     json.dump({"seed": a.seed, "fractions": FRACTIONS, "stratify": ["fractured", "region"],
                "zip_md5": MD5, "dropped_ambiguous": ambiguous,
+               "dropped_truncated": sorted(broken),
                "counts": {k: {"n": len(v), "fractured": sum(r["fractured"] for r in v)} for k, v in splits.items()}},
               open(os.path.join(sdir, "split_meta.json"), "w"), indent=1)
     print()

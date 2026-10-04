@@ -3,3 +3,10 @@
 # Assumes nothing is preinstalled: pulls in torch and vLLM (Linux + NVIDIA GPU).
 -e .
 httpx>=0.25   # examples/t_rex: persistent HTTP client for the real-time player
+
+# FracAtlas vision extension (train/embed_images.py, evaluation/vision_eval.py);
+# runs on Apple Silicon (MPS) with transformers, no vLLM needed for these scripts.
+transformers>=4.57   # Qwen3-VL
+accelerate>=1.0      # low-memory loading of the VL / Qwen3-8B weights
+Pillow>=10
+scikit-learn>=1.4    # baselines (logistic regression) and metrics (AUROC, ROC)

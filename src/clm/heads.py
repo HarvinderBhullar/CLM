@@ -3,7 +3,8 @@
 A CLM checkpoint (as trained by ``train/finetune.py``) is a ``torch.save``
 dict with ``state_head`` / ``action_head`` state dicts, ``logit_scale`` (log of
 the InfoNCE temperature inverse) and ``cfg`` (``width``, ``depth``, optional
-``projection_dim``, ``activation``, ``layernorm``, ``residual``).  Each head maps
+``projection_dim``, ``activation``, ``layernorm``, ``residual``; a vision head adds
+``state_modality: "image"``, ``state_encoder`` and ``action_hidden_size``).  Each head maps
 a 4096-d encoder embedding to a ``projection_dim``-d vector; the score of a
 (state, candidate) pair is ``exp(logit_scale) * cos(state_head(s), action_head(c))``.
 
@@ -86,7 +87,8 @@ class HeadPair:
                   proj=ck.get("projection_dim", cfg.get("projection_dim", PROJ_DIM)),
                   activation=cfg.get("activation", "gelu"), layernorm=cfg.get("layernorm", False),
                   residual=cfg.get("residual", False), hidden=cfg.get("hidden_size", HIDDEN))
-        sh, ah = make_head(**kw), make_head(**kw)
+        # a vision head's state side reads image embeddings, its action side Qwen3-8B text ones
+        sh, ah = make_head(**kw), make_head(**{**kw, "hidden": cfg.get("action_hidden_size", kw["hidden"])})
         sh.load_state_dict(ck["state_head"]); ah.load_state_dict(ck["action_head"])
         sh.eval().to(self.device); ah.eval().to(self.device)
         self.state_head, self.action_head, self.cfg = sh, ah, cfg
@@ -118,6 +120,12 @@ class HeadPair:
         """L2-normalised projections of [n, HIDDEN] state and candidate embeddings."""
         zs, zc = self.project_states(states), self.project_actions(candidates)
         return zs.cpu().numpy(), zc.cpu().numpy()
+
+    @property
+    def modality(self) -> str:
+        """What the state head reads: ``"text"`` (every text checkpoint) or ``"image"``."""
+        self.ensure()
+        return self.cfg.get("state_modality", "text")
 
     @property
     def namespace(self) -> str:

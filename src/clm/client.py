@@ -29,6 +29,8 @@ from typing import Any
 
 import requests
 
+from .image import ImageState
+
 DEFAULT_BASE_URL = "http://127.0.0.1:8700"
 DEFAULT_MODEL = "clm-latest"
 
@@ -169,6 +171,8 @@ class CLMClient:
                    temperature: float | None = None) -> SystemOneResponse:
         """One request: every question answered against one state.  ``temperature``
         (server default 1.0) flattens (>1) or sharpens (<1) the distributions."""
+        if isinstance(state, ImageState):          # a path is read here and sent as base64
+            state = state.to_dict()
         body: dict[str, Any] = {"state": state, "model": model or self.model,
                                 "questions": {k: question_to_dict(q) for k, q in questions.items()}}
         if temperature is not None:

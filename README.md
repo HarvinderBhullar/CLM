@@ -414,6 +414,18 @@ are the client and in-process forms.
 The playground (see [above](#playground)), unless `clm-serve --no-ui`. Static
 files only; every API route above shadows it.
 
+### Image states (experimental)
+
+A vision head (checkpoint `cfg.state_modality == "image"`, trained by
+`train/finetune_vision.py`) answers questions about an image. Send the state as
+`{"type": "image", "image": "<base64 or data: URL>"}`, or pass `ImageState(path=...)`
+to `CLMClient` / `Engine` (the client inlines the file as base64; the HTTP server never
+reads paths). The image goes through the head's own encoder (`cfg.state_encoder`, loaded
+in-process with `transformers` on CUDA, then MPS, then CPU; `CLM_IMAGE_DEVICE` overrides),
+with the instruction it was trained on; the question's options go through the text encoder
+and action head as usual. A vision head refuses text states and a text head refuses image
+states. FracAtlas fracture detection results: [results/fracatlas.md](results/fracatlas.md).
+
 ### `GET /v1/models`
 
 ```json

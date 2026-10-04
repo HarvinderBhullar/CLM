@@ -9,6 +9,13 @@ For each question the state (with the question's instructions appended) goes
 through the state head and every option's description through the action head;
 the softmax over ``scale * cosine`` is the answer.  ``clm-raw`` skips the heads
 (cosine in the encoder's own space) as an ablation.
+
+A vision head (``cfg.state_modality == "image"``) takes an image state instead
+(``ImageState`` or ``{"type": "image", "image": <base64>}``): the image goes through the
+head's own image encoder (``cfg.state_encoder``, with the instruction it was trained on;
+the question's ``instructions`` do not reach it), the options through the usual text
+encoder and action head.  Text states are refused by vision heads and image states by
+text heads, since a head only means something next to the encoder it was trained on.
 """
 from __future__ import annotations
 
@@ -20,6 +27,7 @@ from .cache import CacheDisabled, VectorArena
 from .client import question_to_dict
 from .embedder import Embedder
 from .heads import HIDDEN, HeadPair, default_checkpoint, default_device
+from .image import ImageState, as_image_state
 from .schema import answer_from_logits, build_pairs
 
 DEFAULT_MODEL = "clm-latest"
@@ -36,7 +44,8 @@ class ModelNotFound(KeyError):
 class Engine:
     def __init__(self, embedder: Embedder | None = None, checkpoint: str | None = None,
                  models: dict[str, str] | None = None, checkpoint_dir: str | None = None, device: str | None = None,
-                 emb_url: str | None = None, emb_model: str | None = None, action_cache: Any = None):
+                 emb_url: str | None = None, emb_model: str | None = None, action_cache: Any = None,
+                 allow_image_paths: bool = True, image_device: str | None = None):
         self.embedder = embedder or Embedder(url=emb_url or os.environ.get("CLM_EMB_URL", "http://127.0.0.1:8090/v1/embeddings"),
                                              model=emb_model or os.environ.get("CLM_EMB_MODEL", "qwen3-8b"))
         device = device or default_device()
@@ -53,6 +62,9 @@ class Engine:
             h.ensure()
         self.device = device
         self.arena = self._reserve(action_cache)
+        self.allow_image_paths = allow_image_paths     # the HTTP server turns this off
+        self._images = None                            # image encoders, loaded by the first image state
+        self.image_device = image_device or os.environ.get("CLM_IMAGE_DEVICE")   # None: cuda > mps > cpu
 
     def _reserve(self, budget: Any) -> VectorArena | None:
         """Claim the arena up front, so its cost is paid at start-up or not at all.
@@ -83,6 +95,20 @@ class Engine:
             return compute(texts)
         return self.arena.get(namespace, dim, texts, compute)
 
+    def _image_state(self, head: HeadPair, image: ImageState):
+        """[1, proj] projected image state; cached by the image bytes' sha1."""
+        im, digest = image.load(self.allow_image_paths)
+
+        def compute(_keys):
+            if self._images is None:
+                from .image_embedder import ImageEncoders, image_device
+                self._images = ImageEncoders(self.image_device or image_device())
+            return head.project_states(self._images.embed(head.cfg, [im]))
+
+        if self.arena is None:
+            return compute(None)
+        return self.arena.get(f"{head.namespace}/state", head.proj_dim, [f"image:{digest}"], compute)
+
     def _to_device(self, x):
         import torch
         return torch.from_numpy(x).to(self.device)
@@ -93,6 +119,10 @@ class Engine:
                 RAW_MODEL: "Ablation: cosine in the raw encoder embedding space, no projection head"}
         names = ([DEFAULT_MODEL] if DEFAULT_MODEL in self.heads else []) + \
             sorted(n for n in self.heads if n != DEFAULT_MODEL) + [RAW_MODEL]
+        for n in names:
+            if n in self.heads and self.heads[n].modality == "image":
+                desc.setdefault(n, f"Vision head: image states via {self.heads[n].cfg.get('state_encoder')}, "
+                                   f"options via the text encoder ({os.path.basename(self.heads[n].path)})")
         return [{"name": n, "release_date": RELEASE,
                  "description": desc.get(n) or f"Projection-head checkpoint {os.path.basename(self.heads[n].path)}"}
                 for n in names]
@@ -115,11 +145,24 @@ class Engine:
         else:
             raise ModelNotFound(f"unknown model {model!r}; available: {[m['name'] for m in self.models()]}")
         questions = {k: question_to_dict(q) for k, q in questions.items()}   # Noul/Choice/Score or dicts
-        pairs = build_pairs(state, questions)          # ValueError on malformed questions
+        image = as_image_state(state)                  # None for every text state
+        modality = head.modality if head is not None else "text"
+        if image is not None and modality != "image":
+            raise ValueError(f"model {model!r} reads text states; an image state needs a vision head "
+                             f"(cfg.state_modality == 'image')")
+        if image is None and modality == "image":
+            raise ValueError(f"model {model!r} reads images ({head.cfg.get('state_encoder')}); send "
+                             f"{{'type': 'image', 'image': <base64>}} as the state")
+        pairs = build_pairs("" if image is not None else state, questions)   # ValueError on malformed questions
         states = [p[0] for p in pairs.values()]
         cands = [t for p in pairs.values() for t in p[2]]
         tokens: list[int] = []
-        if head is None:
+        if image is not None:
+            ns, dim = head.namespace, head.proj_dim
+            zq = self._image_state(head, image).expand(len(pairs), -1)     # one image, every question
+            za = self._cached(f"{ns}/action", dim, cands, tokens, head.project_actions)
+            scale = head.scale
+        elif head is None:
             # The raw ablation reuses the encoder's own vectors, in the encoder's own space.
             zq = self._cached("raw/state", HIDDEN, states, tokens)
             za = self._cached("raw/action", HIDDEN, cands, tokens)

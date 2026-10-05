@@ -303,6 +303,41 @@ through the same typed-question API and checkpoint format as text.
 in both train and test, so test numbers are optimistic for unseen patients; with 109 fractured test
 images the AUROC intervals are about ±0.04, wider than most gaps between methods.
 
+### Multi-question experiment: one head, many typed questions
+
+One state head is trained on five FracAtlas questions at once (fracture, body region, orthopedic hardware,
+several scans, fracture count); the three view questions (frontal / lateral / oblique) are held out and
+asked zero-shot. Each option has a training wording and two unseen paraphrases. Test macro AUROC:
+
+| | MedSigLIP: trained | MedSigLIP: held out | Qwen3-VL-4B: trained | Qwen3-VL-4B: held out |
+|---|---:|---:|---:|---:|
+| one CLM head for all questions | 0.952 | **0.496** (zero-shot) | 0.951 | **0.495** (zero-shot) |
+| same head, random option vectors | 0.953 | 0.465 | 0.946 | 0.495 |
+| one CLM head per question | 0.957 | 0.978 (supervised) | 0.950 | 0.954 (supervised) |
+| one linear probe per question | 0.956 | 0.974 (supervised) | 0.948 | 0.951 (supervised) |
+| MedSigLIP's own text tower, no training | 0.811 | **0.660** (zero-shot) | – | – |
+| CLM head, paraphrased options (wording 1 / 2) | 0.919 / 0.845 | | 0.915 / 0.844 | |
+| random option vectors, paraphrased | 0.449 / 0.460 | | 0.501 / 0.545 | |
+
+- **Sharing one head across questions costs nothing and gains nothing** against one probe per question.
+- **Zero-shot fails for the CLM head** (chance), although MedSigLIP's own aligned text tower gets 0.660 on the
+  same questions with no training: a state head trained from scratch loses the pre-trained image–text alignment.
+- **The text tower makes answers robust to rewording**: paraphrased options keep most of the AUROC, while
+  random option vectors fall to chance.
+
+Full tables: [results/fracatlas_multiq_medsiglip.md](results/fracatlas_multiq_medsiglip.md),
+[results/fracatlas_multiq_qwen3-vl-4b.md](results/fracatlas_multiq_qwen3-vl-4b.md). Reproduce:
+
+```bash
+python train/embed_options.py --multiq             # 60 option texts, Qwen3-8B, one batch (~1 min)
+python train/embed_texts_siglip.py                 # MedSigLIP text tower, for its zero-shot baseline
+for e in medsiglip qwen3-vl-4b; do
+  python train/baselines_vision_multi.py --encoder $e --out-dir runs/fracatlas/multiq/lr-$e
+  python train/sweep_vision_multi.py --encoder $e  # val-only grid + controls, ~15 min
+  python evaluation/vision_eval_multiq.py --encoder $e --dry-run && python evaluation/vision_eval_multiq.py --encoder $e
+done
+```
+
 ### Reproduce (Apple Silicon or CUDA, no vLLM needed)
 
 Times measured on an Apple M5 Pro laptop (24 GB unified memory, MPS). MedSigLIP is gated: accept its
@@ -587,12 +622,15 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 │   ├── embed_images.py          #   vision: image embeddings (Qwen3-VL / MedSigLIP, MPS or CUDA)
 │   ├── embed_options.py         #   vision: option texts through Qwen3-8B + the released action head
 │   ├── finetune_vision.py       #   vision: train a state head on image embeddings
+│   ├── finetune_vision_multi.py #   vision: one state head on many typed questions (+ sweep / baselines _multi)
+│   ├── fracatlas_questions.py   #   vision: the multi-question set, wordings and labels
 │   ├── calibrate_vision.py      #   vision: Platt scaling + decision threshold on val -> cfg["calibration"]
 │   ├── sweep_vision.py          #   vision: val-only sweep + ablations
 │   ├── baselines_vision.py      #   vision: logistic-regression linear probe
 │   └── fracatlas_data.py        #   vision: splits + cached embeddings loader
 ├── evaluation/bon_eval.py            # unified best-of-N evaluation
 ├── evaluation/vision_eval.py         # vision: one test evaluation -> results/fracatlas.md
+├── evaluation/vision_eval_multiq.py  # vision: multi-question evaluation -> results/fracatlas_multiq_<encoder>.md
 ├── results/fracatlas.md              # vision: FracAtlas test results (+ fracatlas_verdict.md, written by hand)
 ├── preprocessing/hf_embeddings.py    # embedding dir <-> Hugging Face dataset
 ├── requirements.txt             # pip install -r requirements.txt  (clm + torch + vLLM + example deps)

@@ -58,9 +58,10 @@ embedded, scored by a scaled cosine against the state, and the softmax over cand
 Because states and actions are embedded independently by frozen encoders with small projection heads, embeddings
 are cached and reused, which makes such a model fast to serve and cheap to fine-tune.
 
-The released CLM is text-only. A natural extension is to let the state be an image: keep the text action tower,
-so that questions and answers stay in natural language, and replace the state tower with a frozen image encoder and
-a new head. This raises a simple question that the text setting does not answer: \emph{what does routing a
+The released CLM is text-only, and its authors list vision and multimodal support on their roadmap
+\citep{kwok2026clm}. This paper is an independent study of that extension, not a new idea: we let the state be an
+image, keep the text action tower, so that questions and answers stay in natural language, and replace the state
+tower with a frozen image encoder and a new head. This raises a simple question that the text setting does not answer: \emph{what does routing a
 classification through text option embeddings buy, compared with a classifier on the same image features?} If the
 text tower contributes nothing, a linear probe is the simpler model. If it contributes something --- robustness to
 how a question is worded, or answers to questions never trained on --- the interface is worth its cost.
@@ -476,6 +477,9 @@ mapping every reported number to its source file and commit are available at
 
 \fussy
 \section*{Acknowledgements and use of AI tools}
+This work extends Contrastive Language Models by Kwok et al.\ \citep{kwok2026clm}: the CLM model, its released
+weights and code, and the idea of adding vision and multimodal support (on the CLM roadmap) are theirs; the vision
+experiments, analysis and any errors are the author's.
 The code, experiments and a first draft of this paper were produced with the assistance of an AI coding assistant
 (Claude Code, Anthropic) under the author's direction. The author takes full responsibility for the content; all
 reported numbers come from the result files in the repository. \todo{Adjust wording to the venue's policy.}

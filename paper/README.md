@@ -17,7 +17,7 @@ For arXiv, upload `main.tex`, `references.bib` (or the generated `main.bbl`) and
 
 ## Before submission
 
-- [ ] Author name and date (`\author`, `\date`, marked TODO in red).
+- [x] Author: Harvinder Singh, Independent researcher, harvinderbhullar@gmail.com; date = `\today` (arXiv stamps its own).
 - [ ] Verify the bibliography entries marked `TODO verify` (FracAtlas author list and article number, MedGemma /
       MedSigLIP arXiv id, Qwen3 and Qwen3-VL references, BiomedCLIP).
 - [ ] Adjust the AI-assistance statement to the venue's policy.

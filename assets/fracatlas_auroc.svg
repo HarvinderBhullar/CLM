@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 334" width="900" height="334" font-family="Helvetica, Arial, sans-serif">
+<rect width="900" height="334" fill="#ffffff"/>
+<text x="0" y="22" font-size="16" font-weight="600" fill="#14202a">FracAtlas test AUROC with 95% bootstrap interval</text>
+<circle cx="6" cy="42" r="6" fill="#2a78d6"/>
+<text x="18" y="47" font-size="13" fill="#46555f">Linear probe (logistic regression)</text>
+<circle cx="290" cy="42" r="6" fill="#eb6834"/>
+<text x="302" y="47" font-size="13" fill="#46555f">CLM head (mean of 3 seeds)</text>
+<circle cx="518" cy="42" r="6" fill="#8a959c"/>
+<text x="530" y="47" font-size="13" fill="#46555f">Reference</text>
+<line x1="247.3" x2="247.3" y1="64" y2="294" stroke="#d6dde1" stroke-dasharray="2 3"/>
+<text x="247.3" y="312" font-family="Menlo, Consolas, monospace" font-size="11" fill="#6f7d86" text-anchor="middle">0.5</text>
+<line x1="361.8" x2="361.8" y1="64" y2="294" stroke="#d6dde1" stroke-dasharray="2 3"/>
+<text x="361.8" y="312" font-family="Menlo, Consolas, monospace" font-size="11" fill="#6f7d86" text-anchor="middle">0.6</text>
+<line x1="476.4" x2="476.4" y1="64" y2="294" stroke="#d6dde1" stroke-dasharray="2 3"/>
+<text x="476.4" y="312" font-family="Menlo, Consolas, monospace" font-size="11" fill="#6f7d86" text-anchor="middle">0.7</text>
+<line x1="590.9" x2="590.9" y1="64" y2="294" stroke="#d6dde1" stroke-dasharray="2 3"/>
+<text x="590.9" y="312" font-family="Menlo, Consolas, monospace" font-size="11" fill="#6f7d86" text-anchor="middle">0.8</text>
+<line x1="705.5" x2="705.5" y1="64" y2="294" stroke="#d6dde1" stroke-dasharray="2 3"/>
+<text x="705.5" y="312" font-family="Menlo, Consolas, monospace" font-size="11" fill="#6f7d86" text-anchor="middle">0.9</text>
+<line x1="820.0" x2="820.0" y1="64" y2="294" stroke="#d6dde1" stroke-dasharray="2 3"/>
+<text x="820.0" y="312" font-family="Menlo, Consolas, monospace" font-size="11" fill="#6f7d86" text-anchor="middle">1.0</text>
+<line x1="190" x2="820" y1="294" y2="294" stroke="#d6dde1"/>
+<text x="0" y="85.0" font-size="13" fill="#14202a">Resolution only</text>
+<text x="0" y="101.0" font-size="11.5" fill="#6f7d86">pixel count</text>
+<line x1="237.0" x2="322.7" y1="87.0" y2="87.0" stroke="#8a959c" stroke-width="2" stroke-linecap="round"/>
+<circle cx="279.2" cy="87.0" r="6" fill="#8a959c" stroke="#ffffff" stroke-width="2"/>
+<text x="332.7" y="91.0" font-family="Menlo, Consolas, monospace" font-size="12" fill="#46555f">0.528</text>
+<text x="0" y="131.0" font-size="13" fill="#14202a">Linear probe</text>
+<text x="0" y="147.0" font-size="11.5" fill="#6f7d86">Qwen3-VL-4B</text>
+<line x1="647.7" x2="736.0" y1="133.0" y2="133.0" stroke="#2a78d6" stroke-width="2" stroke-linecap="round"/>
+<circle cx="694.3" cy="133.0" r="6" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<text x="746.0" y="137.0" font-family="Menlo, Consolas, monospace" font-size="12" fill="#46555f">0.890</text>
+<text x="0" y="177.0" font-size="13" fill="#14202a">CLM head</text>
+<text x="0" y="193.0" font-size="11.5" fill="#6f7d86">Qwen3-VL-4B</text>
+<line x1="646.6" x2="729.8" y1="179.0" y2="179.0" stroke="#eb6834" stroke-width="2" stroke-linecap="round"/>
+<circle cx="690.5" cy="179.0" r="6" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
+<text x="739.8" y="183.0" font-family="Menlo, Consolas, monospace" font-size="12" fill="#46555f">0.887</text>
+<text x="0" y="223.0" font-size="13" fill="#14202a">Linear probe</text>
+<text x="0" y="239.0" font-size="11.5" fill="#6f7d86">MedSigLIP-448</text>
+<line x1="660.2" x2="740.7" y1="225.0" y2="225.0" stroke="#2a78d6" stroke-width="2" stroke-linecap="round"/>
+<circle cx="703.2" cy="225.0" r="6" fill="#2a78d6" stroke="#ffffff" stroke-width="2"/>
+<text x="750.7" y="229.0" font-family="Menlo, Consolas, monospace" font-size="12" fill="#46555f">0.898</text>
+<text x="0" y="269.0" font-size="13" fill="#14202a">CLM head</text>
+<text x="0" y="285.0" font-size="11.5" fill="#6f7d86">MedSigLIP-448</text>
+<line x1="657.2" x2="743.4" y1="271.0" y2="271.0" stroke="#eb6834" stroke-width="2" stroke-linecap="round"/>
+<circle cx="703.4" cy="271.0" r="6" fill="#eb6834" stroke="#ffffff" stroke-width="2"/>
+<text x="753.4" y="275.0" font-family="Menlo, Consolas, monospace" font-size="12" fill="#46555f">0.898</text>
+<text x="0" y="330" font-size="11.5" fill="#6f7d86">test split, evaluated once. CLM intervals: mean of the three seeds’ intervals. Source: results/fracatlas.json</text>
+</svg>

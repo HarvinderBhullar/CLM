@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 520" width="1180" height="520" font-family="Helvetica, Arial, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#46555f"/></marker><marker id="l" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c4501f"/></marker></defs>
+<rect width="1180" height="520" fill="#ffffff"/>
+<rect x="20" y="14" width="14" height="14" rx="3" fill="#fbe9e0" stroke="#c4501f" stroke-width="1.5"/>
+<text x="42" y="26" font-size="13" fill="#46555f">Trained here</text>
+<rect x="154.4" y="14" width="14" height="14" rx="3" fill="#e3f0f4" stroke="#0f6b8a" stroke-width="1.5"/>
+<text x="176.4" y="26" font-size="13" fill="#46555f">New to CLM, frozen</text>
+<rect x="332.0" y="14" width="14" height="14" rx="3" fill="#eef1f3" stroke="#6f7d86" stroke-width="1.5"/>
+<text x="354.0" y="26" font-size="13" fill="#46555f">Released CLM, unchanged</text>
+<text x="440" y="74" font-size="12.5" font-weight="500" fill="#c4501f">Training: class-weighted cross-entropy over the two options; only state_head gets gradients</text>
+<path d="M1045,218 V84 H665 V116" fill="none" stroke="#c4501f" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#l)"/>
+<text x="20" y="106" font-family="Menlo, Consolas, monospace" font-size="11.5" font-weight="500" letter-spacing="1" fill="#6f7d86">STATE TOWER · NEW</text>
+<rect x="20" y="120" width="130" height="96" rx="8" fill="#ffffff" stroke="#d6dde1" stroke-width="1.5"/>
+<text x="34" y="146" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">X-ray image</text>
+<text x="34" y="167" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">JPEG / PNG,</text>
+<text x="34" y="186" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">path or base64</text>
+<rect x="180" y="120" width="240" height="96" rx="8" fill="#e3f0f4" stroke="#0f6b8a" stroke-width="1.5"/>
+<text x="194" y="146" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">Image encoder</text>
+<text x="194" y="167" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">Qwen3-VL-4B: image + fixed prompt,</text>
+<text x="194" y="186" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">last token, 2560-d</text>
+<text x="194" y="205" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">or MedSigLIP-448: pooled, 1152-d</text>
+<rect x="450" y="142" width="80" height="52" rx="8" fill="#e3f0f4" stroke="#0f6b8a" stroke-width="1.5"/>
+<text x="464" y="168" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">L2 norm</text>
+<rect x="560" y="120" width="230" height="96" rx="8" fill="#fbe9e0" stroke="#c4501f" stroke-width="2.2"/>
+<text x="574" y="146" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">state_head (new)</text>
+<text x="574" y="167" font-family="Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#46555f">d → 1536 → 1536 → 512</text>
+<text x="574" y="186" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">LayerNorm, GELU, random init</text>
+<text x="574" y="205" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">7.1M / 4.9M params</text>
+<rect x="820" y="142" width="100" height="52" rx="8" fill="#ffffff" stroke="#d6dde1" stroke-width="1.5"/>
+<text x="834" y="168" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">z_state</text>
+<text x="834" y="189" font-family="Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#46555f">512-d, unit</text>
+<text x="20" y="296" font-family="Menlo, Consolas, monospace" font-size="11.5" font-weight="500" letter-spacing="1" fill="#6f7d86">ACTION TOWER · UNCHANGED</text>
+<rect x="20" y="310" width="260" height="96" rx="8" fill="#ffffff" stroke="#d6dde1" stroke-width="1.5"/>
+<text x="34" y="336" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">Option texts</text>
+<text x="34" y="357" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">fracture: “…an acute bone fracture.”</text>
+<text x="34" y="376" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">no_fracture: “…intact bones with</text>
+<text x="34" y="395" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">no fracture.”</text>
+<rect x="310" y="310" width="220" height="96" rx="8" fill="#eef1f3" stroke="#6f7d86" stroke-width="1.5"/>
+<text x="324" y="336" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">Qwen3-8B text encoder</text>
+<text x="324" y="357" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">last token, 4096-d, L2 norm</text>
+<text x="324" y="376" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">embedded once, cached</text>
+<rect x="560" y="310" width="230" height="96" rx="8" fill="#eef1f3" stroke="#6f7d86" stroke-width="1.5"/>
+<text x="574" y="336" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">action_head (released)</text>
+<text x="574" y="357" font-family="Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#46555f">4096 → 1536 → 1536 → 512</text>
+<text x="574" y="376" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">CLM-v0.1-8B weights</text>
+<rect x="820" y="332" width="100" height="52" rx="8" fill="#ffffff" stroke="#d6dde1" stroke-width="1.5"/>
+<text x="834" y="358" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">z_option</text>
+<text x="834" y="379" font-family="Menlo, Consolas, monospace" font-size="12" font-weight="400" fill="#46555f">2 × 512</text>
+<rect x="950" y="218" width="210" height="90" rx="8" fill="#eef1f3" stroke="#6f7d86" stroke-width="1.5"/>
+<text x="964" y="244" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">Score</text>
+<text x="964" y="265" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">100 × cosine similarity, softmax</text>
+<text x="964" y="284" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">Platt + threshold fit on val</text>
+<rect x="950" y="342" width="210" height="64" rx="8" fill="#ffffff" stroke="#d6dde1" stroke-width="1.5"/>
+<text x="964" y="368" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600" fill="#14202a">Typed answer</text>
+<text x="964" y="389" font-family="Helvetica, Arial, sans-serif" font-size="12.5" font-weight="400" fill="#46555f">Choice / Noul, same API as text</text>
+<path d="M150,168 H176" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M420,168 H446" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M530,168 H556" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M790,168 H816" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M280,358 H306" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M530,358 H556" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M790,358 H816" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M920,168 H935 V250 H946" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M920,358 H935 V278 H946" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<path d="M1055,308 V338" fill="none" stroke="#46555f" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="20" y="442" width="1140" height="62" rx="8" fill="none" stroke="#6f7d86" stroke-dasharray="4 4"/>
+<text x="36" y="468" font-size="14" font-weight="600" fill="#14202a">Serving</text>
+<text x="110" y="468" font-size="12.5" fill="#46555f">Engine reads cfg.state_modality: image heads take {"type": "image", "image": base64} and run the head’s own image encoder;</text>
+<text x="110" y="488" font-size="12.5" fill="#46555f">text heads (clm-latest) keep the original path, text → Qwen3-8B → released state_head, unchanged. Mismatches are refused.</text>
+</svg>

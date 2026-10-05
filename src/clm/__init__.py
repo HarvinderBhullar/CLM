@@ -14,11 +14,12 @@ Server: ``clm-serve``.  Checkpoint: ``clm-download``.
 """
 from .client import (Answer, Choice, ChoiceAnswer, CLMClient, CLMError, Noul, NoulAnswer, Question, Score,
                      ScoreAnswer, SystemOneResponse, Usage)
+from .image import ImageState
 from .schema import answer_from_logits, answer_from_probs, build_pairs, candidates, state_text
 
 __version__ = "0.1.0"
 __all__ = ["CLMClient", "CLMError", "Noul", "Choice", "Score", "Question", "Answer", "NoulAnswer", "ChoiceAnswer",
-           "ScoreAnswer", "SystemOneResponse", "Usage", "Engine", "Embedder", "HeadPair",
+           "ScoreAnswer", "SystemOneResponse", "Usage", "ImageState", "Engine", "Embedder", "HeadPair",
            "build_pairs", "candidates", "state_text", "answer_from_logits", "answer_from_probs", "__version__"]
 
 

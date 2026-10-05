@@ -29,6 +29,8 @@ from typing import Any
 
 import requests
 
+from .image import ImageState
+
 DEFAULT_BASE_URL = "http://127.0.0.1:8700"
 DEFAULT_MODEL = "clm-latest"
 
@@ -79,6 +81,7 @@ def question_to_dict(q: Question) -> dict:
 class NoulAnswer:
     noul: float
     type: str = "noul"
+    threshold: float | None = None      # a calibrated vision head's recommended cut on ``noul``
 
     @property
     def probabilities(self) -> dict[str, float]:
@@ -91,6 +94,7 @@ class ChoiceAnswer:
     confidence: float
     probabilities: dict[str, float]
     type: str = "choice"
+    threshold: float | None = None      # set when a calibrated vision head chose by threshold
 
 
 @dataclass
@@ -108,9 +112,10 @@ Answer = NoulAnswer | ChoiceAnswer | ScoreAnswer
 def parse_answer(d: dict) -> Answer:
     t = d.get("type")
     if t == "noul":
-        return NoulAnswer(noul=float(d["noul"]))
+        return NoulAnswer(noul=float(d["noul"]), threshold=d.get("threshold"))
     if t == "choice":
-        return ChoiceAnswer(choice=d["choice"], confidence=float(d["confidence"]), probabilities=dict(d["probabilities"]))
+        return ChoiceAnswer(choice=d["choice"], confidence=float(d["confidence"]), probabilities=dict(d["probabilities"]),
+                            threshold=d.get("threshold"))
     if t == "score":
         return ScoreAnswer(score=float(d["score"]), confidence=float(d["confidence"]),
                            probabilities=dict(d["probabilities"]), legend=dict(d.get("legend", {})))
@@ -169,6 +174,8 @@ class CLMClient:
                    temperature: float | None = None) -> SystemOneResponse:
         """One request: every question answered against one state.  ``temperature``
         (server default 1.0) flattens (>1) or sharpens (<1) the distributions."""
+        if isinstance(state, ImageState):          # a path is read here and sent as base64
+            state = state.to_dict()
         body: dict[str, Any] = {"state": state, "model": model or self.model,
                                 "questions": {k: question_to_dict(q) for k, q in questions.items()}}
         if temperature is not None:

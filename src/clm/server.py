@@ -70,6 +70,7 @@ def create_app(engine: Engine, api_key: str | None = None, ui: bool = True, cors
     """
     app = FastAPI(title="CLM System One API", version="0.1.0")
     app.state.engine = engine
+    engine.allow_image_paths = False      # image states arrive as base64; a request never names a file
     if cors:
         from fastapi.middleware.cors import CORSMiddleware
         app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"],

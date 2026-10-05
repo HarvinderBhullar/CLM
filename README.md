@@ -14,7 +14,7 @@ Contrastive Language Models
 </p>
 
 <p align="center">
-| 📄 <a href="https://contrastive-lm.notion.site"><b>Blog</b></a> | 🗣️ <a href="https://discord.gg/5dAQEDJBs"><b>Discord</b></a> | 🤗 <a href="https://huggingface.co/Contrastive-LM"><b>Data &amp; Models</b></a> | 📚 <a href="#api-reference"><b>API Reference</b></a> | 🛠️ <a href="#fine-tuning-clm-on-your-own-data"><b>Fine-Tuning Tutorial</b></a> |
+| 📄 <a href="https://contrastive-lm.notion.site"><b>Blog</b></a> | 🗣️ <a href="https://discord.gg/5dAQEDJBs"><b>Discord</b></a> | 🤗 <a href="https://huggingface.co/Contrastive-LM"><b>Data &amp; Models</b></a> | 📚 <a href="#api-reference"><b>API Reference</b></a> | 🛠️ <a href="#fine-tuning-clm-on-your-own-data"><b>Fine-Tuning Tutorial</b></a> | 🩻 <a href="#vision-fracture-detection-on-x-rays-experimental"><b>X-ray Vision (experimental)</b></a> |
 </p>
 
 🔥 **Contrastive Language Models (CLMs)** are a new class of **System One
@@ -31,6 +31,12 @@ TypeSafe-compatible API.
   (87.6%)** and **DeepSWE (81.6%)**.
 - **States and actions are disaggregated**, so their embeddings are cached and
   reused independently, which makes training and serving cheap and blazing fast!
+- **Experimental: X-ray states.** An independent extension, toward roadmap item 2,
+  lets a state be an **X-ray image**: a frozen image encoder (MedSigLIP-448 or
+  Qwen3-VL-4B) with a new state head, answering typed questions such as *"Is there
+  a bone fracture?"* through the same API. On FracAtlas it reaches **0.898 test
+  AUROC** for fractures, answers five questions with one head, and stays robust to
+  reworded options. See [X-ray vision](#vision-fracture-detection-on-x-rays-experimental). Research prototype, not a clinical tool.
 
 We invite the community to plug it into their own agents and benchmarks!
 
@@ -110,6 +116,27 @@ engine.rank("What causes tides on Earth?",
 
 engine.answer(state, questions)      # the same dict the HTTP endpoint returns, no server needed
 ```
+
+### Ask about an X-ray (experimental)
+
+A vision head answers typed questions about an image instead of text. Train or
+export one, serve it next to the text encoder, then send the image as the state:
+
+```python
+from clm import CLMClient, Choice, ImageState
+
+client = CLMClient()
+r = client.system_one(
+    ImageState(path="xray.jpg"),                  # sent as base64; the server never reads paths
+    model="fracatlas-medsiglip",                  # clm-serve --model fracatlas-medsiglip=<checkpoint>
+    questions={"fx": Choice(instructions="Is there a bone fracture?",
+                            criteria={"fracture": "Radiograph showing an acute bone fracture.",
+                                      "no_fracture": "Radiograph of intact bones with no fracture."})},
+)
+print(r.answers["fx"].choice, r.answers["fx"].probabilities["fracture"])
+```
+
+Setup, results, calibration and a notebook: [X-ray vision](#vision-fracture-detection-on-x-rays-experimental).
 
 ---
 
@@ -574,7 +601,8 @@ against.
 1. **Scaling experiments:** larger backbones, and how far verification
    performance keeps scaling.
 2. **Vision and multimodal support:** images, video and other modalities for
-   robotics and computer-use tasks.
+   robotics and computer-use tasks. An independent first attempt for X-rays:
+   [X-ray vision](#vision-fracture-detection-on-x-rays-experimental).
 3. **Scaling the data recipe:** more pre-training, hard-negative mining and
    agentic post-training.
 

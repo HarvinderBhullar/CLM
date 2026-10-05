@@ -25,15 +25,21 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--model", default="google/medsiglip-448")
     ap.add_argument("--out", default="data/fracatlas/options_multiq_medsiglip.pt")
+    ap.add_argument("--texts", default=None, help="embed the texts of this JSON list instead (e.g. a text corpus)")
+    ap.add_argument("--chunk", type=int, default=512)
     a = ap.parse_args()
     from transformers import AutoModel, AutoTokenizer
     tok = AutoTokenizer.from_pretrained(a.model)
     model = AutoModel.from_pretrained(a.model, dtype=torch.float32).eval()
-    texts = fq.all_descriptions()
-    x = tok(texts, padding="max_length", max_length=64, truncation=True, return_tensors="pt")
-    with torch.no_grad():
-        t = model.get_text_features(**x)
-        t = F.normalize(t if torch.is_tensor(t) else t.pooler_output, dim=-1)
+    import json
+    texts = json.load(open(a.texts)) if a.texts else fq.all_descriptions()
+    out = []
+    for i in range(0, len(texts), a.chunk):
+        x = tok(texts[i:i + a.chunk], padding="max_length", max_length=64, truncation=True, return_tensors="pt")
+        with torch.no_grad():
+            t = model.get_text_features(**x)
+            out.append(F.normalize(t if torch.is_tensor(t) else t.pooler_output, dim=-1))
+    t = torch.cat(out)
     torch.save({"texts": texts, "emb": t, "meta": {"model": a.model, "padding": "max_length 64",
                                                    "logit_scale": float(model.logit_scale.exp()),
                                                    "logit_bias": float(model.logit_bias)}}, a.out)

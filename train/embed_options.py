@@ -23,6 +23,7 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
 import argparse  # noqa: E402
 import hashlib  # noqa: E402
+import json  # noqa: E402
 import sys  # noqa: E402
 import time  # noqa: E402
 
@@ -92,21 +93,22 @@ def embed_multiq(a) -> None:
     """Raw Qwen3-8B embeddings of every option text of the multi-question set (projected at training time)."""
     import fracatlas_questions
     out = a.out if a.out != "data/fracatlas/options.pt" else "data/fracatlas/options_multiq.pt"
-    texts = fracatlas_questions.all_texts()
+    texts = json.load(open(a.texts)) if a.texts else fracatlas_questions.all_texts()
     recipe = embed_utils.Recipe(a.model, a.max_len)
     t0 = time.time()
     enc = LastToken(a.model, a.device, DTYPES[a.dtype])
     print(f"[options] {a.model} on {a.device} ({a.dtype}), loaded in {time.time() - t0:.0f}s; "
           f"{len(texts)} option texts", flush=True)
     pad = recipe.tok.pad_token_id if recipe.tok.pad_token_id is not None else recipe.tok.eos_token_id
-    raw = torch.from_numpy(enc.batch([recipe.text_ids(t, keep="tail") for t in texts], pad))
+    ids = [recipe.text_ids(t, keep="tail") for t in texts]
+    raw = torch.from_numpy(np.concatenate([enc.batch(ids[i:i + a.chunk], pad) for i in range(0, len(ids), a.chunk)]))
     if not torch.isfinite(raw).all():
         raise SystemExit("non-finite option embedding")
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     torch.save({"texts": texts, "raw": raw,
                 "meta": {"model": a.model, "dtype": a.dtype, "pooling": "last_token",
                          "tokenization": "embed_utils.Recipe.text_ids(keep='tail')", "max_len": a.max_len,
-                         "questions": "train/fracatlas_questions.py"}}, out)
+                         "texts": a.texts or "train/fracatlas_questions.py"}}, out)
     print(f"[options] -> {out} {tuple(raw.shape)}", flush=True)
 
 
@@ -122,6 +124,9 @@ def main() -> None:
     ap.add_argument("--multiq", action="store_true",
                     help="embed every option wording of train/fracatlas_questions.py instead "
                          "(default --out data/fracatlas/options_multiq.pt)")
+    ap.add_argument("--texts", default=None,
+                    help="with --multiq: embed the texts of this JSON list instead (e.g. a text corpus)")
+    ap.add_argument("--chunk", type=int, default=256, help="with --multiq: texts per padded forward pass")
     a = ap.parse_args()
     if a.multiq:
         embed_multiq(a)

@@ -355,13 +355,26 @@ ssh -N -L 8090:localhost:8090 <gpu-box> &          # vLLM from the command above
 clm-serve --model fracatlas-medsiglip=checkpoints/fracatlas-medsiglip.pt
 ```
 
+**Locally, without vLLM (quick test on a Mac).** A vision head only needs the Qwen3-8B embeddings of its
+two option texts, which `train/embed_options.py` already cached. `tools/options_embedder.py` serves exactly
+those on :8090 and refuses any other text (so `clm-latest` won't work against it):
+
+```bash
+python tools/options_embedder.py &                 # stands in for vllm serve on :8090
+clm-serve --model fracatlas-medsiglip=checkpoints/fracatlas-medsiglip.pt
+```
+
+Sample X-rays from the val split (FracAtlas is downloaded by `tools/fracatlas_download.py`):
+`data/fracatlas/raw/FracAtlas/images/Fractured/IMG0004376.jpg` (hand, fractured) and
+`data/fracatlas/raw/FracAtlas/images/Non_fractured/IMG0003669.jpg` (leg, intact).
+
 Ask about a radiograph. Use the option texts the head was trained with (they are stored in its
 `cfg["options"]`); the question's `instructions` do not reach the image encoder.
 
 ```bash
 curl -s localhost:8700/v1/systemone -H 'content-type: application/json' -d @- <<EOF
 {"model": "fracatlas-medsiglip",
- "state": {"type": "image", "image": "$(base64 < xray.jpg | tr -d '\n')"},
+ "state": {"type": "image", "image": "$(base64 < data/fracatlas/raw/FracAtlas/images/Fractured/IMG0004376.jpg | tr -d '\n')"},
  "questions": {"fx": {"type": "choice", "instructions": "Is there a bone fracture?",
    "criteria": {"fracture": "Radiograph showing an acute bone fracture.",
                 "no_fracture": "Radiograph of intact bones with no fracture."}}}}
@@ -372,7 +385,8 @@ EOF
 from clm import CLMClient, Choice, ImageState
 
 client = CLMClient()
-r = client.system_one(ImageState(path="xray.jpg"), model="fracatlas-medsiglip", questions={
+xray = "data/fracatlas/raw/FracAtlas/images/Fractured/IMG0004376.jpg"
+r = client.system_one(ImageState(path=xray), model="fracatlas-medsiglip", questions={
     "fx": Choice(instructions="Is there a bone fracture?",
                  criteria={"fracture": "Radiograph showing an acute bone fracture.",
                            "no_fracture": "Radiograph of intact bones with no fracture."})})
@@ -565,6 +579,7 @@ The code in this repository is released under the [Apache 2.0 License](LICENSE).
 ├── tools/playground_mock.py     # serve the playground without a GPU (fake encoder)
 ├── tools/fracatlas_download.py  # vision: FracAtlas download, cleaning, stratified splits
 ├── tools/fracatlas_figures.py   # vision: assets/clm_vision_arch.svg + assets/fracatlas_auroc.svg
+├── tools/options_embedder.py    # vision: cached option embeddings on :8090, to try a head without vLLM
 ├── train/                       # fine-tuning
 │   ├── finetune.py              #   trains the projection heads on a frozen encoder
 │   ├── adapters.py              #   dataset adapters: agentic traces, typed decisions

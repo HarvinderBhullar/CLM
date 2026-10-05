@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Evaluate the FracAtlas multi-question experiment; write results/fracatlas_multiq.md.
+"""Evaluate the FracAtlas multi-question experiment; write results/fracatlas_multiq_<encoder>.md.
 
     python evaluation/vision_eval_multiq.py --encoder medsiglip --dry-run   # val stands in for test
     python evaluation/vision_eval_multiq.py --encoder medsiglip             # the one test evaluation
+                                              # -> results/fracatlas_multiq_<encoder>.md
 
 Methods (all selected on val by ``train/sweep_vision_multi.py``; nothing here is tuned on test):
 * CLM multi-question head, best config, every seed: trained questions, and the held-out questions
   answered zero-shot;
 * the same head with random option vectors (control: does the text tower matter?);
 * one CLM head per question (control: does sharing one head across questions cost anything?);
-* one logistic-regression probe per question (cannot answer questions it has no labels for).
+* one logistic-regression probe per question (cannot answer questions it has no labels for);
+* for MedSigLIP, its own text tower scoring each option description, with no training (zero-shot).
 
 Per question: AUROC (macro one-vs-rest above two options) and balanced accuracy (binary: threshold
 at max Youden J on val; otherwise argmax), for option wording 0 (training) and paraphrases 1 and 2.
@@ -110,11 +112,13 @@ def main() -> None:
     ap.add_argument("--encoder", default="medsiglip")
     ap.add_argument("--data", default=fracatlas_data.DATA)
     ap.add_argument("--root", default="runs/fracatlas/multiq")
-    ap.add_argument("--out", default="results/fracatlas_multiq.md")
-    ap.add_argument("--verdict", default="results/fracatlas_multiq_verdict.md")
+    ap.add_argument("--out", default=None, help="default results/fracatlas_multiq_<encoder>.md")
+    ap.add_argument("--verdict", default=None, help="default results/fracatlas_multiq_<encoder>_verdict.md")
     ap.add_argument("--dry-run", action="store_true", help="evaluate on val instead of test (no test access)")
     a = ap.parse_args()
 
+    a.out = a.out or f"results/fracatlas_multiq_{a.encoder}.md"
+    a.verdict = a.verdict or f"results/fracatlas_multiq_{a.encoder}_verdict.md"
     split = "val" if a.dry_run else "test"
     sweep = json.load(open(os.path.join(a.root, a.encoder, "sweep.json")))
     holdout, seeds = sweep["holdout"], sweep["seeds"]
@@ -154,6 +158,22 @@ def main() -> None:
         pv, pt = lr_probs(m, v.x.numpy().astype(np.float64), K[q]), lr_probs(m, t.x.numpy().astype(np.float64), K[q])
         lr[q] = {"auroc": safe_auroc(yt, pt, K[q], P[q]), "bacc": balanced_acc(q, yv, pv, yt, pt), "pt": pt}
 
+    # MedSigLIP's own text tower: zero-shot on every question, no FracAtlas training at all
+    siglip = None
+    sp = os.path.join(a.data, "options_multiq_medsiglip.pt")
+    if fracatlas_data.encoder_id(a.encoder) == "google/medsiglip-448" and os.path.exists(sp):
+        sb = torch.load(sp, map_location="cpu")
+        stext, sscale = dict(zip(sb["texts"], sb["emb"])), sb["meta"]["logit_scale"]
+        siglip = {}
+        for q in fq.QUESTIONS:
+            yv, yt = Y[q]
+            siglip[q] = {}
+            for w in range(fq.N_WORDINGS):
+                e = torch.stack([stext[d] for d in fq.descriptions(q, w)[1]]).float()
+                pv = torch.softmax(sscale * v.x @ e.t(), -1).double().numpy()
+                pt = torch.softmax(sscale * t.x @ e.t(), -1).double().numpy()
+                siglip[q][w] = {"auroc": safe_auroc(yt, pt, K[q], P[q]), "bacc": balanced_acc(q, yv, pv, yt, pt)}
+
     def per_q(runs, q, w, key):
         return [r[q][w][key] for r in runs]
 
@@ -181,7 +201,8 @@ def main() -> None:
             "clm_multi_random": {w: {k: per_q(methods["clm_multi_random"], q, w, k) for k in ("auroc", "bacc")}
                                  for w in range(3)},
             "clm_single": {w: {k: [r[w][k] for r in single[q]] for k in ("auroc", "bacc")} for w in range(3)},
-            "lr": {"auroc": lr[q]["auroc"], "bacc": lr[q]["bacc"]}}
+            "lr": {"auroc": lr[q]["auroc"], "bacc": lr[q]["bacc"]},
+            **({"siglip_zero_shot": {w: siglip[q][w] for w in range(3)}} if siglip else {})}
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     out_md = a.out if not a.dry_run else a.out.replace(".md", ".dryrun-val.md")
     json.dump(res, open(out_md.replace(".md", ".json"), "w"), indent=1)
@@ -190,6 +211,8 @@ def main() -> None:
     def macro_of(method, qs, w=0, key="auroc"):
         if method == "lr":
             return statistics.mean(Q[q]["lr"][key] for q in qs)
+        if method == "siglip_zero_shot":
+            return statistics.mean(Q[q][method][w][key] for q in qs)
         return [statistics.mean(Q[q][method][w][key][i] for q in qs) for i in range(len(seeds))]
 
     n, npos = len(t.ids), int(t.y.sum())
@@ -210,7 +233,11 @@ def main() -> None:
          f"| one CLM head per question | {fmt(macro_of('clm_single', trained))} | "
          f"{fmt(macro_of('clm_single', holdout))} (supervised) |",
          f"| one linear probe per question | {fmt(macro_of('lr', trained))} | "
-         f"{fmt(macro_of('lr', holdout))} (supervised) |", "",
+         f"{fmt(macro_of('lr', holdout))} (supervised) |"]
+    if siglip:
+        L += [f"| MedSigLIP's own text tower, no training | {fmt(macro_of('siglip_zero_shot', trained))} (zero-shot) | "
+              f"**{fmt(macro_of('siglip_zero_shot', holdout))}** (zero-shot) |"]
+    L += ["",
          f"- Paired bootstrap ({N_BOOT} resamples), macro AUROC over trained questions, CLM multi (seed-mean "
          f"probabilities) − linear probes: **{paired['diff']:+.3f} [{paired['ci'][0]:+.3f}, {paired['ci'][1]:+.3f}]**.",
          f"- Zero-shot macro AUROC on the held-out questions (seed-mean probabilities): **{zero['auroc']:.3f} "
@@ -221,7 +248,8 @@ def main() -> None:
           "AUROC (macro one-vs-rest for region and fracture count); BA = balanced accuracy (binary: val Youden "
           "threshold; otherwise argmax).", "",
           "| question | positives / n | CLM multi AUROC | CLM multi BA | random options AUROC | single head AUROC "
-          "| linear probe AUROC | linear probe BA |", "|---|---|---:|---:|---:|---:|---:|---:|"]
+          "| linear probe AUROC | linear probe BA |" + (" MedSigLIP zero-shot AUROC |" if siglip else ""),
+          "|---|---|---:|---:|---:|---:|---:|---:|" + ("---:|" if siglip else "")]
     for q in fq.QUESTIONS:
         r = Q[q]
         yt = Y[q][1]
@@ -229,26 +257,33 @@ def main() -> None:
         tag = " (held out)" if q in holdout else ""
         L.append(f"| {NAMES[q]}{tag} | {cnt} | {fmt(r['clm_multi'][0]['auroc'])} | {fmt(r['clm_multi'][0]['bacc'])} "
                  f"| {fmt(r['clm_multi_random'][0]['auroc'])} | {fmt(r['clm_single'][0]['auroc'])} "
-                 f"| {fmt(r['lr']['auroc'])} | {fmt(r['lr']['bacc'])} |")
+                 f"| {fmt(r['lr']['auroc'])} | {fmt(r['lr']['bacc'])} |"
+                 + (f" {fmt(r['siglip_zero_shot'][0]['auroc'])} |" if siglip else ""))
     L += ["", "## Paraphrased options", "",
           "The same heads, asked with option wordings 1 and 2, which no head saw during training. Random option "
           "vectors cannot follow a paraphrase (each wording is a new random vector), so they show what the text "
           "tower contributes.", "",
-          "| question | CLM multi: wording 0 / 1 / 2 | random options: 0 / 1 / 2 | single head: 0 / 1 / 2 |",
-          "|---|---|---|---|"]
+          "| question | CLM multi: wording 0 / 1 / 2 | random options: 0 / 1 / 2 | single head: 0 / 1 / 2 |"
+          + (" MedSigLIP zero-shot: 0 / 1 / 2 |" if siglip else ""), "|---|---|---|---|" + ("---|" if siglip else "")]
     for q in fq.QUESTIONS:
         r = Q[q]
         cell = lambda m: " / ".join(f"{statistics.mean(r[m][w]['auroc']):.3f}" for w in range(3))  # noqa: E731
+        zs = (" " + " / ".join(f"{r['siglip_zero_shot'][w]['auroc']:.3f}" for w in range(3)) + " |") if siglip else ""
         L.append(f"| {NAMES[q]}{' (held out)' if q in holdout else ''} | {cell('clm_multi')} | "
-                 f"{cell('clm_multi_random')} | {cell('clm_single')} |")
+                 f"{cell('clm_multi_random')} | {cell('clm_single')} |" + zs)
+    ms = ("clm_multi", "clm_multi_random", "clm_single") + (("siglip_zero_shot",) if siglip else ())
     L.append(f"| **macro, trained** | " + " | ".join(
-        " / ".join(f"{statistics.mean(macro_of(m, trained, w)):.3f}" for w in range(3))
-        for m in ("clm_multi", "clm_multi_random", "clm_single")) + " |")
+        " / ".join(f"{statistics.mean(np.atleast_1d(macro_of(m, trained, w))):.3f}" for w in range(3))
+        for m in ms) + " |")
     L += ["", "## Setup", "",
           "- Same data, splits, cached image embeddings and released action head as the binary experiment "
           "(`results/fracatlas.md`). Questions and wordings: `train/fracatlas_questions.py`; option texts embedded "
           "once with Qwen3-8B (`train/embed_options.py --multiq`).",
           "- One image embedding answers every question (the question text does not reach the image encoder).",
+          "- MedSigLIP zero-shot: the cached image embedding scored against MedSigLIP's own text embedding of each "
+          "option description (`train/embed_texts_siglip.py`), softmax over options; no FracAtlas training. The "
+          "released MedSigLIP logit scale and bias equal SigLIP's initial values (10, −10); AUROC does not depend "
+          "on the scale.",
           "- Loss: class-weighted cross-entropy per question over its own options, averaged over trained questions; "
           "`logit_scale` frozen at 100; early stopping on mean val AUROC over trained questions.",
           "- Caveats: per-image splits (no patient ids); hardware has few positives "

@@ -108,6 +108,13 @@ def options(qid: str, wording: int = 0) -> tuple[list[str], list[str]]:
     return candidates(wire(qid, wording))
 
 
+def descriptions(qid: str, wording: int = 0) -> tuple[list[str], list[str]]:
+    """(option keys in ``options`` order, the plain option descriptions): what a CLIP-style text
+    encoder is given, without the ``true:`` / ``false:`` prefixes CLM puts on noul options."""
+    keys, _ = options(qid, wording)
+    return keys, [QUESTIONS[qid]["options"][k][wording] for k in keys]
+
+
 def positive_index(qid: str) -> int | None:
     """Index of the positive option for a binary question, else None."""
     keys, _ = options(qid)
@@ -121,6 +128,10 @@ def labels(qid: str, rows: list[dict]) -> np.ndarray:
     keys, _ = options(qid)
     f = QUESTIONS[qid]["label"]
     return np.array([keys.index(f(r)) for r in rows])
+
+
+def all_descriptions() -> list[str]:
+    return list(dict.fromkeys(t for qid in QUESTIONS for w in range(N_WORDINGS) for t in descriptions(qid, w)[1]))
 
 
 def all_texts() -> list[str]:

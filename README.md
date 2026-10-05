@@ -187,7 +187,9 @@ python train/finetune.py --task choice --data LocalLLaMA/typed-decisions --workf
 
 ## Vision: fracture detection on X-rays (experimental)
 
-A research prototype, not a clinical tool. CLM can take an **X-ray image as its state** and
+A research prototype, not a clinical tool, and an independent extension of CLM: vision and multimodal support is
+item 2 of the [roadmap](#roadmap) above, and this section is one attempt at it on X-rays. CLM can take an
+**X-ray image as its state** and
 answer "Is there a bone fracture?" as a typed `Choice` / `Noul` question. The state tower is
 swapped for a frozen image encoder plus a newly trained `state_head`; the action tower (Qwen3-8B
 and the released `action_head`) is unchanged, so the options are ordinary text.

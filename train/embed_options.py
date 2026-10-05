@@ -74,6 +74,41 @@ class LastToken:
             out.append(h[0, -1].float().cpu().numpy())
         return embed_utils.l2(np.stack(out))
 
+    @torch.no_grad()
+    def batch(self, id_lists: list[list[int]], pad_id: int) -> np.ndarray:
+        """One right-padded forward pass for all texts: the weights stream through memory once,
+        which matters when they do not fit next to everything else. Same vectors as ``__call__``."""
+        L = max(map(len, id_lists))
+        ids = torch.full((len(id_lists), L), pad_id, dtype=torch.long)
+        mask = torch.zeros((len(id_lists), L), dtype=torch.long)
+        for i, t in enumerate(id_lists):
+            ids[i, :len(t)] = torch.tensor(t); mask[i, :len(t)] = 1
+        h = self.model(input_ids=ids.to(self.device), attention_mask=mask.to(self.device)).last_hidden_state
+        last = mask.sum(1).to(h.device) - 1
+        return embed_utils.l2(h[torch.arange(len(id_lists), device=h.device), last].float().cpu().numpy())
+
+
+def embed_multiq(a) -> None:
+    """Raw Qwen3-8B embeddings of every option text of the multi-question set (projected at training time)."""
+    import fracatlas_questions
+    out = a.out if a.out != "data/fracatlas/options.pt" else "data/fracatlas/options_multiq.pt"
+    texts = fracatlas_questions.all_texts()
+    recipe = embed_utils.Recipe(a.model, a.max_len)
+    t0 = time.time()
+    enc = LastToken(a.model, a.device, DTYPES[a.dtype])
+    print(f"[options] {a.model} on {a.device} ({a.dtype}), loaded in {time.time() - t0:.0f}s; "
+          f"{len(texts)} option texts", flush=True)
+    pad = recipe.tok.pad_token_id if recipe.tok.pad_token_id is not None else recipe.tok.eos_token_id
+    raw = torch.from_numpy(enc.batch([recipe.text_ids(t, keep="tail") for t in texts], pad))
+    if not torch.isfinite(raw).all():
+        raise SystemExit("non-finite option embedding")
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    torch.save({"texts": texts, "raw": raw,
+                "meta": {"model": a.model, "dtype": a.dtype, "pooling": "last_token",
+                         "tokenization": "embed_utils.Recipe.text_ids(keep='tail')", "max_len": a.max_len,
+                         "questions": "train/fracatlas_questions.py"}}, out)
+    print(f"[options] -> {out} {tuple(raw.shape)}", flush=True)
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -84,7 +119,13 @@ def main() -> None:
     ap.add_argument("--dtype", choices=DTYPES, default="bf16")
     ap.add_argument("--device", default="mps" if torch.backends.mps.is_available() else "cpu")
     ap.add_argument("--no-sanity", action="store_true", help="skip the text-only check through both heads")
+    ap.add_argument("--multiq", action="store_true",
+                    help="embed every option wording of train/fracatlas_questions.py instead "
+                         "(default --out data/fracatlas/options_multiq.pt)")
     a = ap.parse_args()
+    if a.multiq:
+        embed_multiq(a)
+        return
 
     ckpt = a.ckpt or default_checkpoint()
     if not ckpt:

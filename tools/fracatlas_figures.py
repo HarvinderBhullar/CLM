@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Static figures for the FracAtlas vision extension (README + examples notebook).
 
-    python tools/fracatlas_figures.py      # -> assets/clm_vision_arch.svg, assets/fracatlas_auroc.svg
+    python tools/fracatlas_figures.py      # -> assets/clm_vision_arch.svg, fracatlas_auroc.svg, fracatlas_zero_shot.svg
 
 The architecture diagram is fixed; the AUROC chart is drawn from ``results/fracatlas.json``
 (``evaluation/vision_eval.py``). Both are plain SVG on a white ground, so they read the same
@@ -145,12 +145,70 @@ def auroc_chart(res: dict) -> str:
     return "\n".join(p)
 
 
+def zero_shot_chart(mq: dict, al: dict) -> str:
+    """Macro AUROC on trained vs held-out questions, and on paraphrased options, per method (MedSigLIP)."""
+    import statistics as st
+    Q, trained, holdout = mq["questions"], mq["trained"], mq["holdout"]
+    def macro(m, qs, w="0"):
+        if m == "lr":
+            return st.mean(Q[q]["lr"]["auroc"] for q in qs)
+        if m == "siglip_zero_shot":
+            return st.mean(Q[q][m][w]["auroc"] for q in qs)
+        return st.mean(st.mean(Q[q][m][w]["auroc"]) for q in qs)
+    V = al["variants"]
+    a1 = V["A1 text-only, strict corpus"]
+    a3 = next(v for k, v in V.items() if k.startswith("A3 ") and k.endswith("λ = 1"))
+    rows = [("CLM head (from scratch)", CLM, macro("clm_multi", trained), macro("clm_multi", holdout),
+             macro("clm_multi", trained, "1"), macro("clm_multi", trained, "2")),
+            ("Random option vectors", REF, macro("clm_multi_random", trained), macro("clm_multi_random", holdout),
+             macro("clm_multi_random", trained, "1"), macro("clm_multi_random", trained, "2")),
+            ("Text-only aligned head (A1)", NEW, st.mean(a1["trained"]), st.mean(a1["held_out"]),
+             st.mean(a1["trained_paraphrase"][0]), st.mean(a1["trained_paraphrase"][1])),
+            ("Aligned + fine-tuned (A3, λ=1)", TRAIN, st.mean(a3["trained"]), st.mean(a3["held_out"]),
+             st.mean(a3["trained_paraphrase"][0]), st.mean(a3["trained_paraphrase"][1])),
+            ("MedSigLIP text tower (no training)", INK2, macro("siglip_zero_shot", trained),
+             macro("siglip_zero_shot", holdout), macro("siglip_zero_shot", trained, "1"),
+             macro("siglip_zero_shot", trained, "2"))]
+    cols = ["trained questions", "held-out (zero-shot)", "trained, paraphrase 1", "trained, paraphrase 2"]
+    W, L, T, rowH, B = 1060, 250, 70, 34, 40
+    colW = (W - L - 10) / len(cols)
+    H = T + len(rows) * rowH + B
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" font-family="{FONT}">',
+         f'<rect width="{W}" height="{H}" fill="#ffffff"/>',
+         f'<text x="0" y="20" font-size="16" font-weight="600" fill="{INK}">Multi-question test macro AUROC (MedSigLIP)</text>']
+    for j, c in enumerate(cols):
+        x0 = L + j * colW
+        p.append(f'<text x="{x0 + colW / 2:.1f}" y="48" font-size="12" fill="{INK2}" text-anchor="middle">{c}</text>')
+        for t in (0.5, 1.0):
+            xx = x0 + 10 + (t - 0.4) / 0.6 * (colW - 70)
+            p.append(f'<line x1="{xx:.1f}" x2="{xx:.1f}" y1="{T - 8}" y2="{H - B}" stroke="{RULE}" stroke-dasharray="2 3"/>')
+            p.append(f'<text x="{xx:.1f}" y="{H - B + 16}" font-family="{MONO}" font-size="10.5" fill="{MUTED}" '
+                     f'text-anchor="middle">{t:.1f}</text>')
+    for i, (name, c, *vals) in enumerate(rows):
+        cy = T + i * rowH + rowH / 2
+        p.append(f'<text x="0" y="{cy + 4}" font-size="13" fill="{INK}">{name}</text>')
+        for j, v in enumerate(vals):
+            x0 = L + j * colW
+            xx = x0 + 10 + (max(v, 0.4) - 0.4) / 0.6 * (colW - 70)
+            p.append(f'<circle cx="{xx:.1f}" cy="{cy}" r="6" fill="{c}" stroke="#ffffff" stroke-width="2"/>')
+            p.append(f'<text x="{xx + 9:.1f}" y="{cy + 4}" font-family="{MONO}" font-size="11" fill="{INK2}">{v:.2f}</text>')
+    p.append(f'<text x="0" y="{H - 4}" font-size="11.5" fill="{MUTED}">Dotted lines: chance (0.5) and 1.0. Sources: '
+             f'results/fracatlas_multiq_medsiglip.json, results/fracatlas_align_medsiglip.json</text>')
+    p.append("</svg>")
+    return "\n".join(p)
+
+
 def main() -> None:
     res = json.load(open(os.path.join(REPO, "results", "fracatlas.json")))
     if res["eval_split"] != "test":
         raise SystemExit("results/fracatlas.json is a dry run; run evaluation/vision_eval.py first")
     os.makedirs(os.path.join(REPO, "assets"), exist_ok=True)
-    for name, svg in (("clm_vision_arch.svg", architecture()), ("fracatlas_auroc.svg", auroc_chart(res))):
+    figs = [("clm_vision_arch.svg", architecture()), ("fracatlas_auroc.svg", auroc_chart(res))]
+    mq_p, al_p = (os.path.join(REPO, "results", f) for f in ("fracatlas_multiq_medsiglip.json",
+                                                            "fracatlas_align_medsiglip.json"))
+    if os.path.exists(mq_p) and os.path.exists(al_p):
+        figs.append(("fracatlas_zero_shot.svg", zero_shot_chart(json.load(open(mq_p)), json.load(open(al_p)))))
+    for name, svg in figs:
         with open(os.path.join(REPO, "assets", name), "w") as f:
             f.write(svg + "\n")
         print(f"-> assets/{name}")

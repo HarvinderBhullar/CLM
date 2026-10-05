@@ -20,3 +20,5 @@ examples/t_rex/cache/
 examples/t_rex/artifacts/
 # training runs (checkpoints, histories)
 runs/
+# paper build output (rebuild with: cd paper && tectonic main.tex)
+paper/main.pdf

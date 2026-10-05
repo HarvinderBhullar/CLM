@@ -325,6 +325,14 @@ asked zero-shot. Each option has a training wording and two unseen paraphrases. 
 - **The text tower makes answers robust to rewording**: paraphrased options keep most of the AUROC, while
   random option vectors fall to chance.
 
+**Can the zero-shot ability be kept?** A pre-registered follow-up ([protocol](research/protocol_alignment.md),
+[results](results/fracatlas_align_medsiglip.md)) trains the state head on text alone, mapping MedSigLIP text
+embeddings of 6,156 template radiograph descriptions onto their CLM action embeddings, then fine-tunes with
+that alignment as a regulariser. With no image labels it answers fracture at 0.741 (above MedSigLIP's own
+0.659), hardware at 0.892 and region at 0.825, but the held-out view questions stay at chance (0.506), even
+when the corpus mentions views; no regulariser weight recovers them. Both hypotheses are not supported.
+Research records (log, environment, claims ledger): [research/](research/README.md).
+
 Full tables: [results/fracatlas_multiq_medsiglip.md](results/fracatlas_multiq_medsiglip.md),
 [results/fracatlas_multiq_qwen3-vl-4b.md](results/fracatlas_multiq_qwen3-vl-4b.md). Reproduce:
 

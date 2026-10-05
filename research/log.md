@@ -113,5 +113,23 @@ answers robust to rewording. Sources: `results/fracatlas_multiq_medsiglip.md`,
 
 ## 2026-10-05 — alignment-preserving experiment
 
-Pre-registered in `research/protocol_alignment.md` before any run. Results are appended below once the
-test evaluation has run.
+Pre-registered in `research/protocol_alignment.md` (commit `13c4e1d`) before any run; code `30e6bf1`.
+
+- Corpus: template radiograph descriptions, strict 6,156 (no view words) / general 6,804; embedded by
+  MedSigLIP's text tower (5 min, CPU) and Qwen3-8B (18 min, 27 batches; slowed by swap).
+- A1 smoke test: one epoch of text-only training already gave val zero-shot 0.808 on trained questions.
+- Sweep: 24 A1 runs + 18 fine-tuning runs. A1 selection (val zero-shot on trained questions): lr 1e-4,
+  no gap shift, for both corpora (0.769 strict, 0.793 general).
+- Test (once), `results/fracatlas_align_medsiglip.md`:
+
+| variant | trained macro | held-out macro [CI] |
+|---|---:|---|
+| A0 from scratch | 0.952 | 0.488 [0.478, 0.513] |
+| A1 text-only, strict / general | 0.765 / 0.786 | 0.506 [0.469, 0.507] / 0.502 [0.464, 0.503] |
+| A2 (λ = 0) | 0.953 | 0.495 [0.464, 0.497] |
+| A3 λ = 1 (primary) | 0.953 | 0.493 [0.464, 0.496] |
+| MedSigLIP text tower | 0.811 | 0.660 [0.629, 0.690] |
+
+- H1 and H2 not supported. Text-only alignment transfers fracture (0.741 / 0.782, above MedSigLIP's own
+  0.659), hardware and region to images, but not views, even when the corpus mentions views.
+- Deviations: see the protocol (held-out val numbers seen in the dry run, unused; A1 lr at grid edge).

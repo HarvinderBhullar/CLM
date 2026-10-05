@@ -76,4 +76,12 @@ that match the image. This needs only text, no image labels.
 
 ## Deviations
 
-(none yet)
+Recorded after the runs; none changed a variant, a selection or a setting.
+
+1. The val dry run of `evaluation/vision_eval_align.py` printed held-out **val** AUROCs (the protocol
+   reserves held-out labels for the test evaluation). They were seen before the test run but were not used:
+   the sweep and its selections had already finished and were not changed.
+2. The A1 learning rate selected for both corpora (1e-4) is the upper end of the pre-registered grid
+   {3e-5, 1e-4}. Recorded, not extended.
+3. The corpus sizes (6,156 strict, 6,804 general) were not fixed in the protocol; they follow from the
+   templates committed in `30e6bf1`, before any run.

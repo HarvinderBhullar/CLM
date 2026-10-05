@@ -25,7 +25,7 @@ files are the source of truth.
 - Hardware: 24 GB Apple Silicon Mac, so `Qwen/Qwen3-VL-4B-Instruct` (2560-d) instead of the 8B model, plus
   `google/medsiglip-448` (1152-d pooled) as a medical encoder. No vLLM; `transformers` on MPS.
 
-### Data cleaning (commit `ebda7dc`, then `85f041e`)
+### Data cleaning (commit `f71098d`, then `b2e5f39`)
 
 | issue | images | action |
 |---|---:|---|
@@ -36,7 +36,7 @@ Result: 4,022 images, 717 fractured (17.8%). Split train 2,813 (499+), val 609 (
 Image size correlates with the label (29.1% fractured above 1 MP vs 16.5% below); checked later with a
 resolution-only reference (test AUROC 0.528, negligible).
 
-### Embeddings (commits `85f041e`, `a9faaa8`)
+### Embeddings (commits `b2e5f39`, `830d1ba`)
 
 - Qwen3-VL-4B: chat turn = image (≤1024² px) + "Radiograph for fracture assessment.", final-norm hidden
   state of the last token, L2-normalised, fp16. Batched vs single-image embeddings agree (cos ≥ 0.999996).
@@ -46,7 +46,7 @@ resolution-only reference (test AUROC 0.528, negligible).
 - Problem: a run slowed 10× from memory swapping (other apps open). Fixed by loading weights directly to
   MPS and emptying the MPS cache after each batch.
 
-### Training, baselines, test evaluation (commits `6588d29`, `358abac`, `768bde6`)
+### Training, baselines, test evaluation (commits `9dcd14e`, `e0ace69`, `22165c0`)
 
 - Val-only grid lr × weight decay × input dropout, 3 seeds; ablations: trainable `logit_scale`, no input
   standardisation, no class weights, random option vectors.
@@ -58,13 +58,13 @@ resolution-only reference (test AUROC 0.528, negligible).
   runs on one val split. Random option vectors match text options: with two fixed options the text tower is
   only a fixed output direction.
 
-### Serving (commit `1cf3306`)
+### Serving (commit `28528ad`)
 
 Engine routes image states (`{"type": "image", "image": <base64>}`) to the head's own image encoder;
 mismatched head/state modalities are refused; the HTTP server never reads paths. Text path verified
 byte-identical before/after.
 
-### Calibration (commit `e2cf40b`)
+### Calibration (commit `715fd17`)
 
 - Finding (user question "why always predicting no fracture"): with `logit_scale` frozen at 100 the raw
   head is overconfident (~90% of probabilities < 0.01 or > 0.99); its plain `choice` (p > 0.5) missed
@@ -74,7 +74,7 @@ byte-identical before/after.
   0.651/0.963 → 0.835/0.772, ECE 0.085 → 0.040; Qwen3-VL-4B 0.596/0.937 → 0.798/0.809, ECE 0.116 → 0.032.
 - Note: the released MedSigLIP `logit_scale` / `logit_bias` equal SigLIP's initial values (10, −10).
 
-## 2026-10-05 — multi-question experiment (commits `7a9969c`, `7002778`, `8fc425b`, `1c0e655`)
+## 2026-10-05 — multi-question experiment (commits `2da33c9`, `f496b35`, `22a5145`, `b669112`)
 
 ### Design
 
@@ -113,7 +113,7 @@ answers robust to rewording. Sources: `results/fracatlas_multiq_medsiglip.md`,
 
 ## 2026-10-05 — alignment-preserving experiment
 
-Pre-registered in `research/protocol_alignment.md` (commit `13c4e1d`) before any run; code `30e6bf1`.
+Pre-registered in `research/protocol_alignment.md` (commit `7c3a123`) before any run; code `87d91ae`.
 
 - Corpus: template radiograph descriptions, strict 6,156 (no view words) / general 6,804; embedded by
   MedSigLIP's text tower (5 min, CPU) and Qwen3-8B (18 min, 27 batches; slowed by swap).

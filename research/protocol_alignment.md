@@ -84,4 +84,4 @@ Recorded after the runs; none changed a variant, a selection or a setting.
 2. The A1 learning rate selected for both corpora (1e-4) is the upper end of the pre-registered grid
    {3e-5, 1e-4}. Recorded, not extended.
 3. The corpus sizes (6,156 strict, 6,804 general) were not fixed in the protocol; they follow from the
-   templates committed in `30e6bf1`, before any run.
+   templates committed in `87d91ae`, before any run.

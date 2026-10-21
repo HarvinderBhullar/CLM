@@ -82,4 +82,9 @@ Seed *s* of D2 / D3 starts from seed *s* of the selected D1 (general) run; W int
 
 ## Deviations
 
-None yet.
+Recorded after the runs and before the test evaluation; none changed a variant, a selection or a setting.
+
+1. The teacher scale selected for both corpora (T = 100) is the upper end of the pre-registered grid {10, 30, 100},
+   and the learning rate (1e-4) the upper end of {3e-5, 1e-4}. Recorded, not extended.
+2. The val dry run of `evaluation/vision_eval_distill.py` scored the trained questions only, as planned; no
+   held-out label was read before the test evaluation.

@@ -96,7 +96,8 @@ image encoder trained jointly with a text tower (MedSigLIP-448 \citep{sellergren
 \paragraph{Contrastive image--text models.} CLIP \citep{radford2021clip} and SigLIP \citep{zhai2023siglip} align
 images and text in one space and classify zero-shot by comparing an image with text prompts; LiT
 \citep{zhai2022lit} trains the text tower against a locked image tower. Medical variants include ConVIRT
-\citep{zhang2022convirt}, BiomedCLIP \citep{zhang2023biomedclip} and MedSigLIP \citep{sellergren2025medgemma}.
+\citep{zhang2022convirt}, MedCLIP \citep{wang2022medclip}, CheXzero \citep{tiu2022chexzero}, BiomedCLIP
+\citep{zhang2023biomedclip} and MedSigLIP \citep{sellergren2025medgemma}.
 Our setting inverts LiT's: the \emph{text} side is locked (a text-trained CLM action tower) and only a projection
 of a frozen image encoder is trained, typically from scratch.
 
@@ -105,6 +106,13 @@ representation quality \citep{kornblith2019better,radford2021clip}, and zero-sho
 lag supervised probes on in-distribution labels. With a fixed set of options and a trainable projection, scoring
 against text embeddings is a classifier whose output weights are fixed by the text encoder; our random-option
 control makes this explicit.
+
+\paragraph{Fine-tuning and zero-shot ability.} Fine-tuning a zero-shot model on a few labels can distort its
+features and lose robustness \citep{kumar2022finetuning}. Remedies include interpolating the zero-shot and
+fine-tuned weights (WiSE-FT, \citealp{wortsman2022wiseft}) and fine-tuning with the pre-training objective
+\citep{goyal2023flyp}. Here the zero-shot model lives in a \emph{different} space (MedSigLIP's text tower) from the
+head being trained, so we first transfer its ability by knowledge distillation \citep{hinton2015distilling} and
+then test these remedies (Section~\ref{sec:distill}).
 
 \paragraph{Modality gap and text-only training.} Image and text embeddings of contrastive models occupy different
 regions of the shared space \citep{liang2022mindthegap}, and models can be trained on text alone and applied to
@@ -398,25 +406,29 @@ values of $\lambda\in\{0, 0.1, 0.3, 1, 3\}$ are reported.
 
 \begin{table}[t]
   \centering\small
-  \caption{Pre-registered alignment experiment (MedSigLIP), test macro AUROC.}
+  \caption{Pre-registered alignment experiment (MedSigLIP), test macro AUROC. ``Held out'' and its 95\% CI are
+  both computed on the seed-averaged probabilities (three-seed ensemble); the last column is the mean $\pm$ sd of
+  the three single-seed heads. Trained: seed mean $\pm$ sd.}
   \label{tab:align}
-  \begin{tabular}{llccc}
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{llcccc}
     \toprule
-    Variant & Image labels & Trained & Held out & Held-out 95\% CI \\
+    Variant & Image labels & Trained & Held out & Held-out 95\% CI & Held out, per seed \\
     \midrule
-    A0: from scratch & 5 questions & \pmsd{0.952}{0.004} & \pmsd{0.488}{0.014} & [0.478, 0.513] \\
-    A1: text only, strict corpus & none & \pmsd{0.765}{0.033} & \pmsd{0.506}{0.016} & [0.469, 0.507] \\
-    A1: text only, general corpus & none & \pmsd{0.786}{0.020} & \pmsd{0.502}{0.028} & [0.464, 0.503] \\
-    A2: A1 init, fine-tuned, $\lambda=0$ & 5 questions & \pmsd{0.953}{0.003} & \pmsd{0.495}{0.011} & [0.464, 0.497] \\
-    A3: A1 init, fine-tuned, $\lambda=1$ (primary) & 5 questions & \pmsd{0.953}{0.002} & \pmsd{0.493}{0.011} & [0.464, 0.496] \\
-    A3: other $\lambda\in\{0.1,0.3,3\}$ & 5 questions & 0.954--0.955 & 0.490--0.499 & upper $\le$ 0.500 \\
-    MedSigLIP text tower & none & 0.811 & 0.660 & [0.629, 0.690] \\
+    A0: from scratch & 5 questions & \pmsd{0.952}{0.004} & 0.496 & [0.478, 0.513] & \pmsd{0.488}{0.014} \\
+    A1: text only, strict & none & \pmsd{0.765}{0.033} & 0.487 & [0.469, 0.507] & \pmsd{0.506}{0.016} \\
+    A1: text only, general & none & \pmsd{0.786}{0.020} & 0.484 & [0.464, 0.503] & \pmsd{0.502}{0.028} \\
+    A2: A1 init, $\lambda=0$ & 5 questions & \pmsd{0.953}{0.003} & 0.480 & [0.464, 0.497] & \pmsd{0.495}{0.011} \\
+    A3: A1 init, $\lambda=1$ (primary) & 5 questions & \pmsd{0.953}{0.002} & 0.480 & [0.464, 0.496] & \pmsd{0.493}{0.011} \\
+    A3: $\lambda\in\{0.1,0.3,3\}$ & 5 questions & 0.954--0.955 & 0.474--0.483 & upper $\le$ 0.500 & 0.490--0.499 \\
+    MedSigLIP text tower & none & 0.811 & 0.660 & [0.629, 0.690] & -- \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \paragraph{Results.} Both hypotheses are not supported (Table~\ref{tab:align}). The text-only head answers the
-held-out views at chance (0.506, CI [0.469, 0.507]), and so does the general corpus that mentions views (0.502).
+held-out views at chance (0.487 [0.469, 0.507]), and so does the general corpus that mentions views (0.484
+[0.464, 0.503]).
 Fine-tuning keeps trained-question accuracy at every $\lambda$ (0.953) but never lifts the held-out questions.
 Alignment does transfer other concepts to images without any image label (a pre-registered secondary outcome):
 fracture 0.741 (strict) / 0.782 (general), above MedSigLIP's own zero-shot 0.659; hardware 0.892 / 0.883; body region
@@ -471,8 +483,8 @@ particularly at the low sensitivity of an uncalibrated head.
 \sloppy
 Code, configuration, result files, a chronological research log, the pre-registered protocol and a claims ledger
 mapping every reported number to its source file and commit are available at
-\url{https://github.com/HarvinderBhullar/CLM} (branch \texttt{fracatlas-vision}, directories \texttt{research/} and
-\texttt{results/}). Model revisions, library versions and dataset checksums are listed in
+\url{https://github.com/HarvinderBhullar/CLM} (directories \texttt{research/} and \texttt{results/}; the
+paper's version is tagged \texttt{paper-v2}). Model revisions, library versions and dataset checksums are listed in
 \texttt{research/environment.md}. Data, embeddings and checkpoints are regenerated by the documented commands.
 
 \fussy
@@ -482,7 +494,7 @@ weights and code, and the idea of adding vision and multimodal support (on the C
 experiments, analysis and any errors are the author's.
 The code, experiments and a first draft of this paper were produced with the assistance of an AI coding assistant
 (Claude Code, Anthropic) under the author's direction. The author takes full responsibility for the content; all
-reported numbers come from the result files in the repository. \todo{Adjust wording to the venue's policy.}
+reported numbers come from the result files in the repository.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

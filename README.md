@@ -358,8 +358,20 @@ asked zero-shot. Each option has a training wording and two unseen paraphrases. 
 [results](results/fracatlas_align_medsiglip.md)) trains the state head on text alone, mapping MedSigLIP text
 embeddings of 6,156 template radiograph descriptions onto their CLM action embeddings, then fine-tunes with
 that alignment as a regulariser. With no image labels it answers fracture at 0.741 (above MedSigLIP's own
-0.659), hardware at 0.892 and region at 0.825, but the held-out view questions stay at chance (0.506), even
-when the corpus mentions views; no regulariser weight recovers them. Both hypotheses are not supported.
+0.659), hardware at 0.892 and region at 0.825, but the held-out view questions stay at chance (0.487 for the
+seed ensemble), even when the corpus mentions views; no regulariser weight recovers them. Both hypotheses are
+not supported.
+
+A second pre-registered test ([protocol](research/protocol_distill.md),
+[results](results/fracatlas_distill_medsiglip.md)) distils MedSigLIP's image→text similarities into the head on
+unlabelled images. Fine-tuned from that start, the head keeps held-out views above chance (0.542 [0.521, 0.561])
+at full trained accuracy (0.956), but recovers only a quarter of the gap to MedSigLIP (0.660), and the gain
+vanishes when the options are reworded.
+
+**Cross-validation** (`evaluation/fracatlas_cv.py`, 20 folds per image and by blocks of consecutive images as an
+approximate patient split): the CLM head matches the probe with MedSigLIP (Δ +0.001 [−0.010, +0.013]) and
+trails slightly with Qwen3-VL-4B (Δ −0.016 [−0.037, +0.005], blocked); sharing one head costs nothing; removing
+hardware images lowers fracture AUROC by only about 0.01–0.02. Tables: `results/fracatlas_cv_*.md`.
 Research records (log, environment, claims ledger): [research/](research/README.md).
 
 Full tables: [results/fracatlas_multiq_medsiglip.md](results/fracatlas_multiq_medsiglip.md),

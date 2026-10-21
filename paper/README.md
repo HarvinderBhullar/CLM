@@ -18,9 +18,9 @@ For arXiv, upload `main.tex`, `references.bib` (or the generated `main.bbl`) and
 ## Before submission
 
 - [x] Author: Harvinder Singh, Independent researcher, harvinderbhullar@gmail.com; date = `\today` (arXiv stamps its own).
-- [ ] Verify the bibliography entries marked `TODO verify` (FracAtlas author list and article number, MedGemma /
-      MedSigLIP arXiv id, Qwen3 and Qwen3-VL references, BiomedCLIP).
-- [ ] Adjust the AI-assistance statement to the venue's policy.
+- [x] Bibliography identifiers verified (FracAtlas DOI, MedGemma 2507.05201, Qwen3 2505.09388, Qwen3-VL
+      2511.21631, BiomedCLIP 2303.00915).
+- [ ] Check the AI-assistance statement against the venue's policy (current text is a plain disclosure).
 - [ ] Every number traces to `research/claims.md` and `results/`; re-check any number you edit.
 - [ ] arXiv: first-time submitters in cs.CV / cs.LG / eess.IV need an endorsement.
 - [ ] Optional: archive splits, embeddings and the trained heads (e.g. Hugging Face Hub) and cite them.

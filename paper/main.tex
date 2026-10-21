@@ -29,23 +29,20 @@ Independent researcher\\
 \maketitle
 
 \begin{abstract}
-Contrastive language models (CLMs) answer typed questions about a state by scoring each candidate answer with the
-cosine between a projected state embedding and a projected answer embedding, using frozen language-model encoders
-and small trainable projection heads. We ask what such a model gains when its state is an image. We swap the state
-tower for a frozen image encoder (Qwen3-VL-4B or MedSigLIP-448) with a newly trained head, keep the released text
-action tower, and study fracture detection and seven further questions on the public FracAtlas radiograph dataset.
-All choices are made on a validation split and the test split is evaluated once per experiment; one experiment is
-pre-registered. Four findings hold on both encoders. (1)~For a binary question the CLM head matches a logistic
-regression on the same frozen embedding (test AUROC 0.898 vs.\ 0.898 with MedSigLIP); with two fixed options the
-text tower reduces to a fixed output direction, and random option vectors do as well. (2)~One head answers five
-questions as well as one probe per question (macro AUROC 0.952 vs.\ 0.956). (3)~The text tower makes answers robust
-to rewording: with unseen paraphrases of the options the head keeps macro AUROC 0.919 / 0.845, while random option
-vectors fall to chance. (4)~A head trained from scratch cannot answer held-out questions zero-shot (0.496), although
-MedSigLIP's own aligned text tower reaches 0.660 on the same questions. A pre-registered attempt to keep this
-ability by aligning the head on text alone transfers some concepts to images without any image labels (fracture
-0.741, above MedSigLIP's 0.659) but not the held-out view questions, and both pre-registered hypotheses are not
-supported. We also report that a frozen logit scale makes the deployed head overconfident, corrected by validation
-calibration (sensitivity 0.651$\to$0.835), and that 61 FracAtlas images have ambiguous labels or truncated files.
+Contrastive language models (CLMs) answer a typed question about a state by scoring each candidate answer with the
+cosine between a projected state embedding and a projected answer embedding. We study what this interface gains
+when the state is an image: we replace the text state tower with a frozen image encoder (Qwen3-VL-4B or
+MedSigLIP-448) and a new head, keep the released text action tower, and ask eight questions about FracAtlas
+radiographs. Selection uses validation data only, each test split is evaluated once, two experiments are
+pre-registered, and the main comparisons are repeated over 20 cross-validation folds, including folds that keep
+likely studies together. On a trained question the CLM head matches a logistic regression on the same features
+(fracture AUROC 0.898 for both with MedSigLIP; cross-validated difference $+0.001$ [$-0.010$, $+0.013$]; slightly
+behind with Qwen3-VL-4B), and random option vectors do as well. One head answers five questions as well as one probe per question, and the text tower keeps answers
+robust to reworded options (macro AUROC 0.919 vs.\ chance for random vectors). Zero-shot transfer to held-out
+questions fails for a head trained from scratch (0.496), although MedSigLIP's own text tower reaches 0.660.
+Aligning the head on text alone does not fix this; distilling MedSigLIP's image--text similarities on unlabelled
+images keeps held-out questions above chance after fine-tuning (0.542), but recovers only a quarter of the gap and
+not under paraphrase. We also report a calibration fix for the deployed head and 61 problematic FracAtlas files.
 This is a research prototype, not a clinical tool.
 \end{abstract}
 
@@ -81,12 +78,17 @@ image encoder trained jointly with a text tower (MedSigLIP-448 \citep{sellergren
   \item A controlled evaluation on two encoders: linear probes, per-question heads, random option vectors that
         remove the text tower's content, and MedSigLIP's own zero-shot text tower; validation-only selection and a
         single test evaluation per experiment (Section~\ref{sec:setup}).
-  \item Four findings: the head equals a probe on a binary question; one head serves many questions at no cost;
+  \item Four findings: the head matches a probe on a binary question; one head serves many questions at no cost;
         the text tower makes answers robust to paraphrase; zero-shot transfer to held-out questions fails for a
         head trained from scratch (Section~\ref{sec:results}).
-  \item A pre-registered experiment that tries to preserve zero-shot ability by aligning the head on text alone;
-        it transfers fractures, hardware and body regions to images without image labels, but not views
-        (Section~\ref{sec:align}).
+  \item Two pre-registered experiments on keeping zero-shot ability: aligning the head on text alone transfers
+        fractures, hardware and body regions to images without image labels, but not views
+        (Section~\ref{sec:align}); distilling MedSigLIP's image--text similarities on unlabelled images keeps
+        held-out questions above chance after fine-tuning, by a small and paraphrase-fragile margin
+        (Section~\ref{sec:distill}).
+  \item A cross-validation analysis (20 folds, per image and by blocks of consecutive images) that confirms the
+        main comparisons with intervals about three times narrower than the single split, and a check that
+        fracture detection does not rest on orthopedic hardware (Section~\ref{sec:cv}).
   \item Data-quality notes on FracAtlas: two images with ambiguous labels and 59 truncated JPEG files whose
         decoding creates a label shortcut (Section~\ref{sec:data}).
 \end{itemize}
@@ -389,6 +391,46 @@ untrained on FracAtlas, reaches 0.660 (frontal 0.645, lateral 0.652, oblique 0.6
 five questions learns where images lie relative to those questions' option vectors only, and discards the
 image--text alignment the encoder was trained with.
 
+\subsection{Robustness: repeated cross-validation}
+\label{sec:cv}
+
+With 109 fractured test images, single-split intervals ($\pm0.04$) are wider than most differences between
+methods. In a post-hoc analysis (not pre-registered) we pool all 4{,}022 images and repeat the main comparisons over
+$4\times5$-fold cross-validation, with an inner validation split for early stopping and probe $C$ and
+hyperparameters fixed at the values selected on the original split. Two fold schemes are used: per image, and by
+blocks of 20 consecutive image ids. FracAtlas has no patient ids, but consecutive images are often views of one
+study (label correlation 0.66 at lag~1 vs.\ about 0.40 from lag~2 on), so blocked folds approximate a patient-level
+split. Differences use the corrected resampled $t$ interval \citep{nadeau2003inference}, which accounts for
+overlapping training sets.
+
+\begin{table}[t]
+  \centering\small
+  \caption{Cross-validation (20 folds; mean over folds). Differences: mean [95\% corrected resampled $t$ CI].
+  ``No HW'': fracture AUROC on images without orthopedic hardware.}
+  \label{tab:cv}
+  \setlength{\tabcolsep}{3.5pt}
+  \resizebox{\linewidth}{!}{%
+  \begin{tabular}{llccccc}
+    \toprule
+    Encoder & Folds & Fracture CLM / probe & $\Delta$ CLM$-$probe & No HW $\Delta$ & 5 questions $\Delta$ & Held out \\
+    \midrule
+    MedSigLIP & image & 0.915 / 0.913 & $+0.001$ [$-0.010$, $+0.013$] & $+0.001$ & $+0.002$ [$-0.004$, $+0.007$] & 0.506 \\
+    MedSigLIP & blocked & 0.903 / 0.901 & $+0.002$ [$-0.011$, $+0.015$] & $+0.002$ & $+0.002$ [$-0.004$, $+0.008$] & 0.502 \\
+    Qwen3-VL-4B & image & 0.876 / 0.881 & $-0.006$ [$-0.017$, $+0.006$] & $-0.007$ & $+0.004$ [$-0.003$, $+0.010$] & 0.491 \\
+    Qwen3-VL-4B & blocked & 0.856 / 0.872 & $-0.016$ [$-0.037$, $+0.005$] & $-0.019$ & $+0.000$ [$-0.008$, $+0.009$] & 0.489 \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+
+Table~\ref{tab:cv} confirms the single-split findings with intervals about three times narrower. The CLM head
+matches the probe with MedSigLIP and trails it slightly with Qwen3-VL-4B (blocked folds: $-0.016$, probe ahead in 16
+of 20 folds, CI including zero); random option vectors stay level with text options ($+0.002$ / $+0.003$ with
+MedSigLIP). Sharing one head across five questions costs nothing on any setting, paraphrase robustness holds (0.911 /
+0.849 macro with MedSigLIP, blocked), and held-out questions stay at chance. Blocked folds lower fracture AUROC by
+0.012--0.020, so the per-image split was slightly optimistic. Removing the 99 hardware images, almost all fractured,
+lowers fracture AUROC by about 0.013 (MedSigLIP) to 0.021 (Qwen3-VL-4B) and leaves the comparison unchanged: the
+detector does not rest on hardware.
+
 \subsection{Can zero-shot ability be kept? A pre-registered test}
 \label{sec:align}
 
@@ -411,6 +453,7 @@ values of $\lambda\in\{0, 0.1, 0.3, 1, 3\}$ are reported.
   the three single-seed heads. Trained: seed mean $\pm$ sd.}
   \label{tab:align}
   \setlength{\tabcolsep}{4pt}
+  \resizebox{\linewidth}{!}{%
   \begin{tabular}{llcccc}
     \toprule
     Variant & Image labels & Trained & Held out & Held-out 95\% CI & Held out, per seed \\
@@ -423,7 +466,7 @@ values of $\lambda\in\{0, 0.1, 0.3, 1, 3\}$ are reported.
     A3: $\lambda\in\{0.1,0.3,3\}$ & 5 questions & 0.954--0.955 & 0.474--0.483 & upper $\le$ 0.500 & 0.490--0.499 \\
     MedSigLIP text tower & none & 0.811 & 0.660 & [0.629, 0.690] & -- \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 \paragraph{Results.} Both hypotheses are not supported (Table~\ref{tab:align}). The text-only head answers the
@@ -438,6 +481,59 @@ need not preserve that direction. Deviations from the protocol are disclosed in 
 numbers were printed by a dry run of the evaluation script after selection had finished and were not used; the
 selected A1 learning rate was the upper end of its grid.
 
+\subsection{Distillation on images: a second pre-registered test}
+\label{sec:distill}
+
+\paragraph{Motivation and protocol.} The text-only head never had view ability, so remedies for fine-tuning
+distortion such as WiSE-FT \citep{wortsman2022wiseft} had nothing to preserve. A second protocol, committed before
+any run, first transfers MedSigLIP's zero-shot ability on \emph{images}: for unlabelled training images and batches
+of 256 corpus sentences $t_j$, the head is trained (D1) with $\mathrm{KL}(p_T\,\|\,p_S)$, where
+\begin{align}
+  p_T(j\mid i) &= \mathrm{softmax}_j\big(T\cos(\text{img}_i,\, \text{SigLIP}_{\text{text}}(t_j))\big), \\
+  p_S(j\mid i) &= \mathrm{softmax}_j\big(100\cos(h_s(\text{img}_i),\, h_a(e_a(t_j)))\big).
+\end{align} D2 fine-tunes D1 on the five questions, D3 adds
+$\lambda\cdot$KL ($\lambda=1$ primary), and W interpolates D1 and D2 weights ($\alpha=0.5$ primary). Learning rate
+and $T\in\{10,30,100\}$ were selected on validation zero-shot AUROC of the trained questions; the validation dry run
+scored trained questions only. The pre-registered criteria are those of H1/H2: held-out CI lower bound above 0.5
+(\textbf{H3}: D1; \textbf{H4}: D3; \textbf{H5}: W), and for H4/H5 trained macro AUROC $\ge 0.942$.
+
+\begin{table}[t]
+  \centering\small
+  \caption{Pre-registered distillation experiment (MedSigLIP), test macro AUROC. Estimates and CIs from the
+  three-seed ensemble; last column: per-seed mean $\pm$ sd.}
+  \label{tab:distill}
+  \setlength{\tabcolsep}{4pt}
+  \resizebox{\linewidth}{!}{%
+  \begin{tabular}{llcccc}
+    \toprule
+    Variant & Image labels & Trained & Held out & Held-out 95\% CI & Per seed \\
+    \midrule
+    A0: from scratch & 5 questions & 0.955 & 0.496 & [0.478, 0.513] & \pmsd{0.488}{0.014} \\
+    D1: distillation, strict corpus & none & 0.706 & 0.557 & [0.537, 0.575] & \pmsd{0.562}{0.028} \\
+    D1: distillation, general corpus & none & 0.692 & 0.531 & [0.508, 0.554] & \pmsd{0.537}{0.019} \\
+    D2: D1 init, $\lambda=0$ & 5 questions & 0.959 & 0.539 & [0.520, 0.558] & \pmsd{0.536}{0.014} \\
+    D3: D1 init, $\lambda=1$ (primary) & 5 questions & 0.956 & 0.542 & [0.521, 0.561] & \pmsd{0.544}{0.022} \\
+    D3: $\lambda\in\{0.1,0.3,3\}$ & 5 questions & 0.958--0.959 & 0.537--0.559 & lower $\ge$ 0.515 & -- \\
+    W: $\alpha=0.5$ (primary) & 5 questions & 0.952 & 0.546 & [0.525, 0.566] & \pmsd{0.546}{0.015} \\
+    W: $\alpha\in\{0.25,0.75\}$ & 5 questions & 0.914 / 0.958 & 0.536 / 0.541 & lower $\ge$ 0.512 & -- \\
+    MedSigLIP text tower & none & 0.811 & 0.660 & [0.629, 0.690] & -- \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+
+\paragraph{Results.} All three hypotheses meet their criteria (Table~\ref{tab:distill}), but the effect is small.
+Distillation on images gives held-out views above chance without any view label (D1 general 0.531, vs.\ 0.484 for
+text-only alignment), and fine-tuning from the distilled head keeps it at full trained accuracy (D3 0.542, W 0.546;
+A0 0.496). The initialisation does the work: D2, without any distillation term, keeps 0.539, and no $\lambda$ or
+$\alpha$ is clearly better than another. Three observations limit the claim. (i)~The strict corpus, which never
+mentions views, transfers \emph{more} (0.557) than the general one; the protocol predicted chance. View information
+reaches the student through sentences that co-vary with view (composition, body part), so this is not evidence that
+the head learned the concept of a view. (ii)~The gain is uneven: frontal does not improve on A0, lateral moves from
+0.434 to about 0.50, oblique up to 0.649. (iii)~With paraphrased held-out options every variant returns to chance
+(0.42--0.54), and paraphrase robustness on trained questions drops as $\lambda$ grows (wording~1: 0.907 at
+$\lambda=0$, 0.840 at $\lambda=3$). Distillation recovers about a quarter of the gap between chance and MedSigLIP's
+own zero-shot (0.04 of 0.16).
+
 \section{Discussion}
 
 \paragraph{When the text tower matters.} For a fixed, trained question the text tower is a fixed output layer; any
@@ -449,8 +545,11 @@ head and one API for many typed questions, tolerant to paraphrase --- rather tha
 \paragraph{Why zero-shot is lost.} Training the head only with options of the trained questions constrains image
 embeddings along the few directions those option vectors span; nothing constrains the directions that encode view.
 Text-only alignment constrains the directions the corpus exercises, and transfers exactly those concepts (fracture,
-hardware, anatomy). Views were barely exercised. Corpora that vary the held-out attribute as much as the others, or
-alignment on paired radiographs and reports, are the natural next tests.
+hardware, anatomy). Views were barely exercised. Distilling on images closes part of the modality gap and keeps the
+transferred signal through fine-tuning, which suggests the loss happens at initialisation rather than during
+fine-tuning: a head that starts with the ability largely keeps it. What it keeps is weak and tied to the corpus
+rather than to the concept. Teachers with stronger view knowledge, corpora that vary the held-out attribute,
+and alignment on paired radiographs and reports are the natural next tests.
 
 \paragraph{Practical notes.} A frozen logit scale of 100, inherited from the text CLM, is too sharp for an image head;
 calibration on validation data restores useful probabilities and sensitivity. The released MedSigLIP logit scale and
@@ -461,7 +560,8 @@ probabilities directly.
 
 One dataset; per-image splits that can place one patient's views in train and test; a small test set (109
 fractured images, AUROC intervals about $\pm0.04$, wider than most differences between methods); auxiliary questions
-that are easy for every method; a 4B vision--language encoder instead of the 8B model the released head expects;
+that are easy for every method; patient grouping approximated by blocks of consecutive image ids; a 4B vision--language encoder instead of the 8B
+model the released head expects;
 template-generated text for alignment; hardware labels that overlap with fracture; and a CLM foundation described in
 a blog post rather than a peer-reviewed paper. Results on chest radiographs, CT or MRI, and with patient-level splits,
 may differ.
@@ -469,10 +569,12 @@ may differ.
 \section{Conclusion}
 
 Routing an image classifier through a text-trained CLM action tower does not improve accuracy on a question it was
-trained for, but it lets one head serve many typed questions and makes its answers robust to rewording. It does not
-by itself answer new questions: a head trained from scratch, or aligned through text alone, loses the zero-shot
-ability its image encoder had for concepts the training does not exercise. Keeping that ability is the open problem
-for vision CLMs.
+trained for, but it lets one head serve many typed questions and makes its answers robust to rewording; both results
+hold across 20 cross-validation folds. It does not by itself answer new questions: a head trained from scratch, or
+aligned through text alone, loses the zero-shot ability its image encoder had. Distillation on unlabelled images,
+followed by ordinary fine-tuning, keeps some of it, but only a quarter of the teacher's margin and not under
+rewording. Transferring the full zero-shot ability of an aligned image--text model into a CLM state head remains the
+open problem for vision CLMs.
 
 \section*{Ethics statement}
 FracAtlas is public, de-identified and licensed CC BY 4.0. This work is a research prototype and makes no clinical

@@ -44,3 +44,30 @@ Pre-registered: `research/protocol_alignment.md` (commit `7c3a123`, before any r
 | A2 | fine-tuning with an alignment regulariser keeps trained accuracy but not held-out zero-shot | A3 λ = 1: trained 0.953, held-out 0.493 [0.464, 0.496]; all λ 0.490–0.499 | pre-registered H2, not supported |
 | A3 | text-only alignment transfers some concepts to images with no image labels | A1 fracture 0.741 / 0.782 vs MedSigLIP zero-shot 0.659; hardware 0.892 / 0.883; region 0.825 / 0.796 | pre-registered secondary outcome |
 | A4 | an aligned start does not change trained-question accuracy | 0.953 (A2/A3) vs 0.952 (A0) | pre-registered secondary outcome |
+
+## Distillation experiment
+
+Pre-registered: `research/protocol_distill.md` (commit `d335cdd`, before any run). Source:
+`results/fracatlas_distill_medsiglip.md`. Estimates and CIs are from the three-seed ensemble.
+
+| # | claim | evidence | status |
+|---|---|---|---|
+| X1 | distillation on unlabelled images gives held-out views above chance without view labels | D1 general 0.531 [0.508, 0.554]; strict 0.557 [0.537, 0.575] | pre-registered H3, supported |
+| X2 | fine-tuning from the distilled head keeps held-out above chance at full trained accuracy | D3 λ = 1: 0.542 [0.521, 0.561], trained 0.956; W α = 0.5: 0.546 [0.525, 0.566], trained 0.952 | pre-registered H4, H5, supported |
+| X3 | the initialisation, not the regulariser, carries the effect | D2 (λ = 0) 0.539 [0.520, 0.558]; all λ, α within 0.536–0.559 | pre-registered secondary outcome |
+| X4 | the strict corpus (no view words) transfers more than the general one, against the protocol's prediction | 0.557 vs 0.531 | pre-registered secondary outcome |
+| X5 | the held-out gain does not survive paraphrase | held-out wording 1 / 2: 0.42–0.54 for every variant | pre-registered secondary outcome |
+| X6 | distillation recovers a small part of MedSigLIP's zero-shot | 0.54 vs 0.660 (MedSigLIP) and 0.496 (A0) | derived |
+
+## Cross-validation (post hoc, not pre-registered)
+
+Source: `results/fracatlas_cv_<encoder>_<scheme>.md` (`evaluation/fracatlas_cv.py`); 4 × 5 folds; blocked = folds
+of 20 consecutive image ids (approximate study grouping).
+
+| # | claim | evidence |
+|---|---|---|
+| C1 | the CLM head matches the probe with MedSigLIP | Δ +0.001 [−0.010, +0.013] image; +0.002 [−0.011, +0.015] blocked |
+| C2 | with Qwen3-VL-4B the probe is slightly ahead, not significantly | Δ −0.006 [−0.017, +0.006] image; −0.016 [−0.037, +0.005] blocked (4/20 folds > 0) |
+| C3 | sharing one head across five questions costs nothing | Δ −0.000 to +0.004, every CI includes 0 |
+| C4 | fracture detection does not rest on hardware | without hardware images AUROC drops 0.013–0.021; Δ CLM − probe unchanged |
+| C5 | per-image splits are slightly optimistic | blocked folds lower fracture AUROC by 0.012 (MedSigLIP) / 0.020 (Qwen3-VL-4B) |

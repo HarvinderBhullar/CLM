@@ -133,3 +133,15 @@ Pre-registered in `research/protocol_alignment.md` (commit `7c3a123`) before any
 - H1 and H2 not supported. Text-only alignment transfers fracture (0.741 / 0.782, above MedSigLIP's own
   0.659), hardware and region to images, but not views, even when the corpus mentions views.
 - Deviations: see the protocol (held-out val numbers seen in the dry run, unused; A1 lr at grid edge).
+
+## 2026-10-21 — distillation experiment
+
+Pre-registered in `research/protocol_distill.md` (commit `d335cdd`) before any run; code `917cf8d`.
+
+- Why: the text-only head (A1) had no view ability, so WiSE-FT-style remedies had nothing to keep. Distil
+  MedSigLIP's image→text distribution over corpus sentences into the CLM scoring, on unlabelled train images.
+- Sweep: 36 D1 runs + 15 fine-tuning runs + 9 interpolated heads, about 40 min. D1 selection (val zero-shot on
+  trained questions): lr 1e-4, T = 100 for both corpora (both grid edges, recorded as a deviation).
+- Dry run on val scored trained questions only. Test (once), `results/fracatlas_distill_medsiglip.md`:
+  H3, H4, H5 supported, but held-out macro only 0.53–0.56 (MedSigLIP 0.660, A0 0.496); the strict corpus
+  transfers more than the general one; held-out gains vanish under paraphrase.

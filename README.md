@@ -293,7 +293,7 @@ p(fracture) ≈ 1e-5, not 0.5. Its plain `choice` (the more probable option) mis
 fractures. `train/calibrate_vision.py` fixes this on **val only**: Platt scaling of the logit difference
 plus a decision threshold (max Youden J), stored in the checkpoint's `cfg["calibration"]` and applied
 by the engine. A calibrated head returns meaningful probabilities, and its `choice` follows the threshold
-(the answer carries it as `threshold`). The deployed checkpoints, and every head behind the paper's tables, are on
+(the answer carries it as `threshold`). The deployed checkpoints, and every head behind the reported results, are on
 the Hugging Face Hub at [harvinderbhullar/CLM-vision-fracatlas](https://huggingface.co/harvinderbhullar/CLM-vision-fracatlas)
 (`hf download harvinderbhullar/CLM-vision-fracatlas deployed/fracatlas-medsiglip.pt --local-dir checkpoints`;
 the MedSigLIP heads come under the HAI-DEF terms, see the model card). Deployed checkpoints (seed 0) on test:
